@@ -5,8 +5,8 @@ import (
 	"log"
 	"net/http"
 
-	"webhook_test_server/persistent"
 	"webhook_test_server/handler"
+	"webhook_test_server/persistent"
 )
 
 func main() {
@@ -21,7 +21,12 @@ func main() {
 	}
 	defer db.Close()
 
-	// Create the webhook handler with the database dependency
+	// Initialize tables on startup
+    if err := db.InitializeTables("EventWebhook"); err != nil {
+        log.Fatalf("failed to initialize tables: %v", err)
+    }
+
+
 	// Create the webhook handler with the database dependency
     webhookHandler := handler.NewWebhookHandler(db)
 
@@ -31,7 +36,10 @@ func main() {
 	http.HandleFunc("/health", handler.HealthHandler)
 	http.HandleFunc("/dbhealth", webhookHandler.DBHealthHandler)
 	// Webhook Handler handles post request
-	http.HandleFunc("/", webhookHandler.HandleWebhook)
+	//http.HandleFunc("/", webhookHandler.HandleWebhook)
+	// Webhook Handler for my deal events
+	http.HandleFunc("/", webhookHandler.WebhookEvents)
+	//http.HandleFunc("/", webhookHandler.HandleEventWebhook)
 
 	err = http.ListenAndServe(":"+port, nil)
 	if err != nil {
