@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -73,18 +74,19 @@ func TestHandleWebhook(t *testing.T) {
         t.Fatal(err) // Handle errors with JSON marshaling
     }
 
+    tableName:= "My_Table"
+    fmt.Println("TableName before mock setup:", tableName) 
      // Setting up the expected call with mock for CreateTableIfNotExists
-    db.On("CreateTableIfNotExists", "My_Table").Return(nil)
-
+    db.On("CreateTableIfNotExists", tableName).Return(nil)
     // Setting up the expected call with mock
     db.On("StoreData", 
-        "My_Table", 
+        tableName, 
         "PK#MerchantId:45", 
         mock.AnythingOfType("model.UserMessageData")).Return(nil)
 
-
-    handler := handler.NewWebhookHandler(db)
-
+    
+    handler := handler.NewWebhookHandler(db,tableName)
+   
     // Setting up a request
     req := httptest.NewRequest("POST", "/45", bytes.NewReader(jsonData))
     req.Header.Set("Content-Type", "application/json")
@@ -103,11 +105,12 @@ func TestHandleWebhook(t *testing.T) {
 }
 
 // TestWebhookEvents tests the webhook handler function
-func TestWebhookEvents(t *testing.T) {
+func TestWebhookVariantStockUpdateEvents(t *testing.T) {
     db := new(MockDB)
+    tableName:= "EventWebhook"
 
     // Initialize the handler
-    handler := handler.NewWebhookHandler(db)
+    handler := handler.NewWebhookHandler(db,tableName)
 
     // Setup a sample dynamic event for testing
     variantStockUpdatedEvent := model.VariantStockUpdated{
@@ -129,7 +132,7 @@ func TestWebhookEvents(t *testing.T) {
 
     // Mock expected database interactions
     db.On("StoreEventData",
-        "EventWebhook",
+        tableName,
         "variant/stock-updated",
         "529c8a0d-4b85-495a-a54c-6031995d9c2a",
         "2024-05-07T01:47:00.138Z",
@@ -143,7 +146,7 @@ func TestWebhookEvents(t *testing.T) {
     w := httptest.NewRecorder()
 
     // Call the handler
-    handler.HandleEventWebhook(w, req)
+    handler.WebhookEvents(w, req)
 
     // Check the response
     res := w.Result()
@@ -166,9 +169,10 @@ func TestWebhookEvents(t *testing.T) {
 // TestWebhookEvents tests the webhook handler function
 func TestWebhookOrderCreatedEvents(t *testing.T) {
     db := new(MockDB)
+    tableName:= "EventWebhook"
 
     // Initialize the handler
-    handler := handler.NewWebhookHandler(db)
+    handler := handler.NewWebhookHandler(db,tableName)
 
     // Setup a sample dynamic event for testing
     orderCreated := model.OrderCreated{
@@ -196,7 +200,7 @@ func TestWebhookOrderCreatedEvents(t *testing.T) {
 
     // Mock expected database interactions
     db.On("StoreEventData",
-        "EventWebhook",
+        tableName,
         "order/created",
         "48b4a0d1-2a95-4308-9a45-00c65b6e70e4",
         "2024-05-03T03:48:13.506Z",
@@ -230,14 +234,13 @@ func TestWebhookOrderCreatedEvents(t *testing.T) {
     db.AssertExpectations(t)
 }
 
-
-
 // TestDBHealthHandler tests the database health check endpoint
 func TestDBHealthHandlerOk(t *testing.T) {
     db := new(MockDB)
-    db.On("DescribeTable", "My_Table").Return(nil) // Simulate a healthy database
+    tableName:= "EventWebhook"
+    db.On("DescribeTable", tableName).Return(nil) // Simulate a healthy database
 
-    handler := handler.NewWebhookHandler(db)
+    handler := handler.NewWebhookHandler(db,tableName)
     req := httptest.NewRequest("GET", "/dbhealth", nil)
     w := httptest.NewRecorder()
 
@@ -254,9 +257,10 @@ func TestDBHealthHandlerOk(t *testing.T) {
 // TestDBHealthHandlerFail tests the scenario where the database is unhealthy
 func TestDBHealthHandlerFail(t *testing.T) {
     db := new(MockDB)
-    db.On("DescribeTable", "My_Table").Return(errors.New("database error")) // Simulate an unhealthy database
+    tableName:= "EventWebhook"
+    db.On("DescribeTable", tableName).Return(errors.New("database error")) // Simulate an unhealthy database
 
-    handler := handler.NewWebhookHandler(db)
+    handler := handler.NewWebhookHandler(db,tableName)
     req := httptest.NewRequest("GET", "/dbhealth", nil)
     w := httptest.NewRecorder()
 
@@ -267,4 +271,21 @@ func TestDBHealthHandlerFail(t *testing.T) {
     assert.Equal(t, http.StatusInternalServerError, res.StatusCode, "Expected internal server error status")
 
     db.AssertExpectations(t)
+}
+
+func TestNewAPIError(t *testing.T) {
+    err := fmt.Errorf("test error")
+    apiErr := handler.NewAPIError(http.StatusBadRequest, err, "A test error occurred.")
+
+    if apiErr.StatusCode != http.StatusBadRequest {
+        t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, apiErr.StatusCode)
+    }
+
+    if apiErr.Cause != "test error" {
+        t.Errorf("Expected cause 'test error', got '%s'", apiErr.Cause)
+    }
+
+    if apiErr.Message != "A test error occurred." {
+        t.Errorf("Expected message 'A test error occurred.', got '%s'", apiErr.Message)
+    }
 }

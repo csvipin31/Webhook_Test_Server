@@ -167,13 +167,14 @@ func ConnectToAWSDynamoDB() (*dynamodb.DynamoDB, error) {
 // ConnectToLocalDynamoDB connects to a local DynamoDB instance.
 func ConnectToLocalDynamoDB() (*dynamodb.DynamoDB, error) {
 	endpoint := os.Getenv("DYNAMODB_ENDPOINT")
+	region := os.Getenv("DYNAMODB_REGION")
 	log.Println("### LOCAL_DYNAMODB.", endpoint)
 	if endpoint == "" {
 		endpoint = "http://localhost:8001" // Default local endpoint
 	}
 
 	sess := session.Must(session.NewSession(&aws.Config{
-		Region:   aws.String("us-west-2"), // Replace with your desired region
+		Region:   aws.String(region), // Replace with your desired region
 		Endpoint: aws.String(endpoint),
 		Credentials: credentials.NewStaticCredentials(
 			"dummy",
