@@ -79,14 +79,15 @@ func (h *WebhookHandler) DBHealthHandler(w http.ResponseWriter, r *http.Request)
         return NewAPIError( http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"), "Only GET allowed, using wrong method TYPE")
     }
 
-	if err := h.db.DescribeTable(h.tableNames[0]); err != nil {
-        return NewAPIError( http.StatusInternalServerError, err, "Database is not healthy:unable to describe table")
-    }
+	tableName := h.tableNames[0]
+	err := h.db.DescribeTable(tableName)
+	if err != nil {
+		logRequestEnd(startTime, method, url, handlerName, http.StatusInternalServerError)
+		return NewAPIError(http.StatusInternalServerError, err, "Database is unhealthy")
+	}
 
-    // Write the result to the response
-    logRequestEnd(startTime, method, url, handlerName, http.StatusOK)
+	logRequestEnd(startTime, method, url, handlerName, http.StatusOK)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Database is healthy"})
-   
 	return nil
 }
 

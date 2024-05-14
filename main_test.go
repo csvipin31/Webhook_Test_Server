@@ -287,11 +287,13 @@ func TestDBHealthHandlerFail(t *testing.T) {
     tableNames := []string{"EventWebhook"}
     db.On("DescribeTable", tableNames[0]).Return(errors.New("database error")) // Simulate an unhealthy database
 
-    handler := handler.NewWebhookHandler(db,tableNames)
+    h := handler.NewWebhookHandler(db,tableNames)
+    handlerFunc := handler.Make(h.DBHealthHandler)
+
     req := httptest.NewRequest("GET", "/dbhealth", nil)
     w := httptest.NewRecorder()
 
-    handler.DBHealthHandler(w, req)
+    handlerFunc(w, req)
 
     res := w.Result()
     defer res.Body.Close()
