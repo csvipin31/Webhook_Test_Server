@@ -55,6 +55,7 @@ func Make(h APIfunc) http.HandlerFunc {
 	}
 }
 
+// writeJSON writes a JSON response with the given status code
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -63,37 +64,33 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	}
 }
 
-func sendAPIError(w http.ResponseWriter, apiErr APIError) {
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(apiErr.StatusCode)
-    json.NewEncoder(w).Encode(apiErr)
-}
 
 func validateByType(data interface{}) error {
-    v := reflect.ValueOf(data).Elem()  // Ensure data is a pointer to a struct
+    v := reflect.ValueOf(data)
+    if v.Kind() != reflect.Ptr || v.IsNil() {
+        return fmt.Errorf("data must be a non-nil pointer")
+    }
+
+    v = v.Elem()
+    if v.Kind() != reflect.Struct {
+        return fmt.Errorf("data must be a pointer to a struct")
+    }
 
     for i := 0; i < v.NumField(); i++ {
         field := v.Field(i)
-        typeOfField := field.Type()
+        fieldName := v.Type().Field(i).Name
 
-        // Check for zero value based on type dynamically
         if field.IsZero() {
-            return fmt.Errorf("field %s is required and cannot be zero", v.Type().Field(i).Name)
+            return fmt.Errorf("field %s is required and cannot be zero", fieldName)
         }
 
-        // You can add more type-specific validations here if necessary
-        switch typeOfField.Kind() {
+        switch field.Kind() {
         case reflect.String:
-            // Example of additional validation for strings
             if field.Len() == 0 {
-                return fmt.Errorf("field %s must be a non-empty string", v.Type().Field(i).Name)
+                return fmt.Errorf("field %s must be a non-empty string", fieldName)
             }
-        case reflect.Int, reflect.Int32, reflect.Int64:
-            // Example validation for integers if needed
         case reflect.Struct:
-            // Recursive validation for nested structs
-            err := validateByType(field.Addr().Interface())
-            if err != nil {
+            if err := validateByType(field.Addr().Interface()); err != nil {
                 return err
             }
         }

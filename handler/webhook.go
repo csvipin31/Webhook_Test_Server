@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"time"
 
 	"webhook_test_server/model"
 	"webhook_test_server/persistent"
@@ -28,96 +29,91 @@ func NewWebhookHandler(db persistent.DatabaseInterface, tableName []string) *Web
 
 // Health Check : ReadyHandler, LiveHandler, HealthHandler
 func ReadyHandler(w http.ResponseWriter, r *http.Request) error {
-	log.Println("ReadyHandler:")
-     if r.Method != http.MethodGet {
-        sendAPIError(w, NewAPIError( http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"), "Only GET allowed, using wrong method TYPE"))
-        return fmt.Errorf("method not allowed")
+    handlerName := "ReadyHandler"
+    startTime, method, url := logRequestStart(r, handlerName)
+    log.Println("ReadyHandler:")
+
+    if r.Method != http.MethodGet {
+        return NewAPIError(http.StatusMethodNotAllowed, fmt.Errorf("method Not Allowed") , "Only GET requests are accepted.")
     }
-	w.WriteHeader(http.StatusOK)
-	_, err := fmt.Fprintf(w, "Ready")
-	if err != nil {
-        sendAPIError(w, NewAPIError( http.StatusInternalServerError, err, "Internal Server Error"))
-        return err
-	}
+
+    logRequestEnd(startTime, method, url, handlerName, http.StatusOK)
+    writeJSON(w, http.StatusOK, map[string]string{"message": "Server is Ready"})
     return nil
 }
+
 
 func LiveHandler(w http.ResponseWriter, r *http.Request) error {
-	log.Println("LiveHandler:")
-     if r.Method != http.MethodGet {
-        sendAPIError(w, NewAPIError( http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"), "Only GET allowed, using wrong method TYPE"))
-        return fmt.Errorf("method not allowed")
+    handlerName := "LiveHandler"
+    startTime, method, url := logRequestStart(r, handlerName)
+
+    if r.Method != http.MethodGet {
+        return NewAPIError(http.StatusMethodNotAllowed, fmt.Errorf("method Not Allowed"), "Only GET requests are accepted.")
     }
 
-	w.WriteHeader(http.StatusOK)
-	_, err := fmt.Fprintf(w, "Live")
-	if err != nil {
-		sendAPIError(w, NewAPIError( http.StatusInternalServerError, err, "Internal Server Error"))
-        return err
-	}
+    logRequestEnd(startTime, method, url, handlerName, http.StatusOK)
+    writeJSON(w, http.StatusOK, map[string]string{"message": "Server is Live"})
     return nil
 }
+
 
 func HealthHandler(w http.ResponseWriter, r *http.Request) error {
-	log.Println("HealthHandler:")
-     if r.Method != http.MethodGet {
-        sendAPIError(w, NewAPIError( http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"), "Only GET allowed, using wrong method TYPE"))
-        return fmt.Errorf("method not allowed")
+    handlerName := "HealthHandler"
+    startTime, method, url := logRequestStart(r, handlerName)
+
+    if r.Method != http.MethodGet {
+        return NewAPIError(http.StatusMethodNotAllowed, fmt.Errorf("method Not Allowed"), "Only GET requests are accepted.")
     }
 
-	w.WriteHeader(http.StatusOK)
-
-	_, err := fmt.Fprintf(w, "OK")
-	if err != nil {
-		sendAPIError(w, NewAPIError( http.StatusInternalServerError, err, "Internal Server Error"))
-        return err
-	}
+    logRequestEnd(startTime, method, url, handlerName, http.StatusOK)
+    writeJSON(w, http.StatusOK, map[string]string{"message": "Server is Healthy"})
     return nil
 }
 
+
 func (h *WebhookHandler) DBHealthHandler(w http.ResponseWriter, r *http.Request) error {
-    log.Println("DBHealthHandler:")
+    handlerName := "DBHealthHandler"
+	startTime, method, url := logRequestStart(r, handlerName)
+
     if r.Method != http.MethodGet {
-        sendAPIError(w, NewAPIError( http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"), "Only GET allowed, using wrong method TYPE"))
-        return fmt.Errorf("method not allowed")
+        return NewAPIError( http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"), "Only GET allowed, using wrong method TYPE")
     }
 
 	if err := h.db.DescribeTable(h.tableNames[0]); err != nil {
-        http.Error(w, "Database is not healthy: "+err.Error(), http.StatusInternalServerError)
-        sendAPIError(w, NewAPIError( http.StatusInternalServerError, err, "Database is not healthy:unable to describe table"))
-        return err
+        return NewAPIError( http.StatusInternalServerError, err, "Database is not healthy:unable to describe table")
     }
-    w.WriteHeader(http.StatusOK)
-    w.Write([]byte("Database is healthy"))
-    return nil
+
+    // Write the result to the response
+    logRequestEnd(startTime, method, url, handlerName, http.StatusOK)
+	writeJSON(w, http.StatusOK, map[string]string{"message": "Database is healthy"})
+   
+	return nil
 }
 
 func (h *WebhookHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) error {
+    handlerName := "HandleWebhook"
+	startTime, method, url := logRequestStart(r, handlerName)
     if r.Method != http.MethodPost {
-        sendAPIError(w, NewAPIError(http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"), "Only POST requests are accepted."))
-        return fmt.Errorf("method not allowed")
+        return NewAPIError(http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"), "Only POST requests are accepted.")
     }
 
     // Validate and extract merchant ID from the URL
     id, err := extractMerchantId(r.URL.Path)
     if err != nil {
-        sendAPIError(w, NewAPIError(http.StatusBadRequest, err, "Invalid merchant ID format."))
-        return err
+        return NewAPIError(http.StatusBadRequest, err, "Invalid merchant ID format.")
     }
 
     // Process JSON payload
 	var data model.UserMessageData
     err = processJSON(r, &data)
     if err != nil {
-        sendAPIError(w, NewAPIError(http.StatusBadRequest, err, "Failed to process JSON."))
-        return err
+        return NewAPIError(http.StatusBadRequest, err, "Failed to process JSON.")
    }
 
    if err := validateByType(&data); err != nil {
         // Handle validation error
         fmt.Fprintf(w, "Validation error: %v", err)
-        sendAPIError(w, NewAPIError(http.StatusBadRequest, err, "Validation error :Type does not match check payload"))
-        return err
+        return NewAPIError(http.StatusBadRequest, err, "Validation error :Type does not match check payload")
     }
 
     // Interact with the database
@@ -127,42 +123,37 @@ func (h *WebhookHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) e
 	// Ensure the table exists or create if it does not exist
     if err := h.db.CreateTableIfNotExists(tableName); err != nil {
         log.Printf("Error ensuring table exists: %v", err)
-        sendAPIError(w, NewAPIError(http.StatusInternalServerError, err, "Database table creation failed."))
-        return err
+        return NewAPIError(http.StatusInternalServerError, err, "Database table creation failed.")
     }
 
 	// Store the data in the database
     if err := h.db.StoreData(tableName, pKey, data); err != nil {
-        sendAPIError(w, NewAPIError(http.StatusInternalServerError, err, "Failed to store data."))
-        return err
+        return NewAPIError(http.StatusInternalServerError, err, "Failed to store data.")
     }
 
-    w.Header().Set("Content-Type", "text/plain")
-    w.WriteHeader(http.StatusOK)
-    w.Write([]byte("Success"))
+     // Log success and write the response
+	logRequestEnd(startTime, method, url, handlerName, http.StatusOK)
+    writeJSON(w, http.StatusOK, map[string]string{"message": "Success"})
     return nil
 }
 
 func (h *WebhookHandler) WebhookEvents(w http.ResponseWriter, r *http.Request) error {
-	log.Printf("WebhookEvents ")
+	handlerName := "WebhookEvents"
+	startTime, method, url := logRequestStart(r, handlerName)
     if r.Method != http.MethodPost {
-        sendAPIError(w, NewAPIError(http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"), "Only POST requests are accepted."))
-        return fmt.Errorf("method not allowed")
+        return NewAPIError(http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"), "Only POST requests are accepted.")
     }
 
     // Validate and extract merchant ID from the URL
     marketplace, err := extractMerchantId(r.URL.Path)
     if err != nil {
-        sendAPIError(w, NewAPIError(http.StatusBadRequest, err, "Invalid merchant ID format."))
-        return err
+        return NewAPIError(http.StatusBadRequest, err, "Invalid merchant ID format.")
     }
 
 	//Read the request body into a byte slice
     body, err := io.ReadAll(r.Body)
     if err != nil {
-        http.Error(w, "Error reading request body: "+err.Error(), http.StatusInternalServerError)
-        sendAPIError(w, NewAPIError(http.StatusInternalServerError, err, "Error reading request body"))
-        return err
+        return NewAPIError(http.StatusInternalServerError, err, "Error reading request body")
     }
     
 	defer r.Body.Close() // Close the body after reading
@@ -172,8 +163,7 @@ func (h *WebhookHandler) WebhookEvents(w http.ResponseWriter, r *http.Request) e
 	//Decode the JSON into a generic map to identify the event type
     var event model.EventTypeHolder
     if err := json.Unmarshal(body, &event); err != nil {
-        sendAPIError(w, NewAPIError(http.StatusBadRequest, err, "Failed to decode JSON:"))
-        return err
+        return NewAPIError(http.StatusBadRequest, err, "Failed to decode JSON:")
     }
 
     log.Printf("Received event type: %s", event.Type)
@@ -182,38 +172,125 @@ func (h *WebhookHandler) WebhookEvents(w http.ResponseWriter, r *http.Request) e
     case "order/created":
 		var orderCreatedEvent model.OrderCreated
         if err := unMarshallJSON(body, &orderCreatedEvent); err != nil {
-            http.Error(w, "Failed to decode order created event: "+err.Error(), http.StatusBadRequest)
-            return err
+            return NewAPIError(http.StatusBadRequest, err, "Failed to decode order created event")
         }
         log.Printf("Received JSON order created: %+v", &orderCreatedEvent)
         h.handleOrderEventCreated(h.tableNames[0],marketplace, orderCreatedEvent)
 	case "variant/stock-updated":
 		var variantStockUpdatedEvent model.VariantStockUpdated
         if err := json.Unmarshal(body, &variantStockUpdatedEvent); err != nil {
-            http.Error(w, "Failed to decode order created event: "+err.Error(), http.StatusBadRequest)
-            return err
+            return NewAPIError(http.StatusBadRequest, err, "Failed to decode variant stock updated event")
         }
         log.Printf("Received JSON order created: %+v", &variantStockUpdatedEvent)
         h.handleVariantStockUpdated(h.tableNames[1],marketplace, variantStockUpdatedEvent)
     case "product/subscribed":
 		var ProductSubscribedEvent model.ProductSubscribed
         if err := json.NewDecoder(r.Body).Decode(&ProductSubscribedEvent); err != nil {
-            http.Error(w, "Failed to decode Product SubscribedEvent event: "+err.Error(), http.StatusBadRequest)
-            return err
+            return NewAPIError(http.StatusBadRequest, err, "Failed to decode product subscribed event")
         }
         h.handleProductSubscribed(marketplace,ProductSubscribedEvent)
     default:
-        http.Error(w, "Unhandled event type", http.StatusBadRequest)
+       return NewAPIError(http.StatusBadRequest, fmt.Errorf("unhandled event type"), "Unhandled event type")
     }
 
-    w.Header().Set("Content-Type", "text/plain")
-    w.WriteHeader(http.StatusOK)
-    w.Write([]byte("Success"))
+    // Log success and write the response
+	logRequestEnd(startTime, method, url, handlerName, http.StatusOK)
+    writeJSON(w, http.StatusOK, map[string]string{"message": "Success"})
     return nil
 }
 
+func (h *WebhookHandler) GetOrderEventsByPK(w http.ResponseWriter, r *http.Request) error {
+    handlerName := "GetOrderEventsByPK"
+	startTime, method, url := logRequestStart(r, handlerName)
 
 
+    if r.Method != http.MethodGet {
+        return NewAPIError( http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"), "Only GET allowed, using wrong method TYPE")
+    }
+
+    // Extract parameters from the URL or request
+    merchantId := r.URL.Query().Get("merchantId")
+    externalOrderId := r.URL.Query().Get("externalOrderId")
+    if merchantId == "" || externalOrderId == "" {
+        return NewAPIError(http.StatusBadRequest, fmt.Errorf("missing merchantId or externalOrderId parameter"), "Missing merchantId or externalOrderId parameter")
+    }
+
+    // Construct the primary key
+    pk := fmt.Sprintf("#PK#%s#%s", merchantId, externalOrderId)
+
+    // Fetch data based on primary key without requiring SK
+    tableName := h.tableNames[0]
+    result, err := h.db.FetchByPrimaryKey(tableName, pk)
+    if err != nil {
+        return NewAPIError(http.StatusBadRequest, err, "Failed to fetch order events:")
+    }
+
+    // Check if items were found
+    if len(result.Items) == 0 {
+        http.Error(w, "Order events not found", http.StatusNotFound)
+        return NewAPIError(http.StatusNotFound, fmt.Errorf("order event Not found for PK : %s", pk), "Order events not found")
+    }
+
+    // Convert DynamoDB items to OrderEvent structs
+    var orderEvents []persistent.OrderEvent
+    for _, item := range result.Items {
+        event, err := persistent.ConvertDynamoItemToOrderEvent(item)
+        if err != nil {
+            return NewAPIError(http.StatusInternalServerError, err, "Failed to parse order event")
+        }
+        orderEvents = append(orderEvents, event)
+    }
+
+    // Write the result to the response
+	writeJSON(w, http.StatusOK, orderEvents)
+    logRequestEnd(startTime, method, url, handlerName, http.StatusOK)
+
+	return nil
+}
+
+
+func (h *WebhookHandler) GetOrderByExternalID(w http.ResponseWriter, r *http.Request) error {
+	handlerName := "GetOrderByExternalID"
+	startTime, method, url := logRequestStart(r, handlerName)
+
+     if r.Method != http.MethodGet {
+        return NewAPIError( http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"), "Only GET allowed, using wrong method TYPE")
+    }
+
+    // Extract parameters from the URL or request
+    externalOrderId := r.URL.Query().Get("externalOrderId")
+    if  externalOrderId == "" {
+        return NewAPIError(http.StatusBadRequest, fmt.Errorf("missing externalOrderId parameter"), "Missing externalOrderId parameter")
+    }
+
+    // Fetch data based on primary key without requiring SK
+    tableName := h.tableNames[0]
+    result, err := h.db.QueryOrderEventsByExternalOrderId(tableName, externalOrderId)
+    if err != nil {
+        return NewAPIError(http.StatusBadRequest, err, "Failed to fetch order events: by external order Id")
+    }
+
+    // Check if items were found
+    if len(result.Items) == 0 {
+        return NewAPIError(http.StatusNotFound, fmt.Errorf("order event Not found for PK : %s", externalOrderId), "Order events not found")
+    }
+
+    // Convert DynamoDB items to OrderEvent structs
+    var orderEvents []persistent.OrderEvent
+    for _, item := range result.Items {
+        event, err := persistent.ConvertDynamoItemToOrderEvent(item)
+        if err != nil {
+            return NewAPIError(http.StatusInternalServerError, err, "Failed to parse order event")
+        }
+        orderEvents = append(orderEvents, event)
+    }
+
+    // Write the result to the response
+	writeJSON(w, http.StatusOK, orderEvents)
+    logRequestEnd(startTime, method, url, handlerName, http.StatusOK)
+
+    return nil
+}
 
 
 /* Utility functions
@@ -332,4 +409,20 @@ func unMarshallJSON(body []byte, target interface{}) error {
     }    
     log.Printf("Processed JSON: %+v", target)
     return nil
+}
+
+func logRequestStart(r *http.Request, handlerName string) (startTime time.Time, method, url string) {
+	startTime = time.Now()
+	method = r.Method
+	url = r.URL.String()
+
+	log.Printf("INFO: Received request: Method=%s, URL=%s, Handler=%s", method, url, handlerName)
+	return startTime, method, url
+}
+
+func logRequestEnd(startTime time.Time, method, url, handlerName string, responseStatus int) {
+	processingTime := time.Since(startTime)
+
+	log.Printf("INFO: Request processed successfully: Method=%s, URL=%s, Handler=%s, ResponseStatus=%d, ProcessingTime=%s",
+		method, url, handlerName, responseStatus, processingTime)
 }

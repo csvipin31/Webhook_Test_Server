@@ -12,6 +12,8 @@ func SetupRoutes(webhookHandler *WebhookHandler) {
     http.HandleFunc("/health", Make(HealthHandler))
     http.HandleFunc("/dbhealth", Make(webhookHandler.DBHealthHandler))
     http.HandleFunc("/", Make(webhookHandler.WebhookEvents))
+    http.HandleFunc("/order", Make(webhookHandler.GetOrderEventsByPK))
+    http.HandleFunc("/externalOrderId", Make(webhookHandler.GetOrderByExternalID))
 
     // Log route configuration 
     log.Println("HTTP routes configured successfully.")

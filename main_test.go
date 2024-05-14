@@ -15,6 +15,8 @@ import (
 	"webhook_test_server/model"
 	"webhook_test_server/persistent"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -66,6 +68,20 @@ func (m *MockDB) StoreEventData(tableName, eventType, eventId, lastUpdated, merc
 func (m *MockDB) StoreOrderEventData(tableName, eventType, externalOrderId, lastUpdated, merchantId string, eventData interface{}) error {
     args := m.Called(tableName, eventType, externalOrderId, lastUpdated, merchantId, eventData)
     return args.Error(0)
+}
+func (m *MockDB) FetchByPrimaryKey(tableName, pk string) (*dynamodb.QueryOutput, error) {
+    args := m.Called(tableName, pk)
+    return args.Get(0).(*dynamodb.QueryOutput), args.Error(1)
+}
+
+func (m *MockDB) FetchByGSI(tableName, gsiName string, keyConditions map[string]*dynamodb.Condition) (*dynamodb.QueryOutput, error) {
+    args := m.Called(tableName, gsiName, keyConditions)
+    return args.Get(0).(*dynamodb.QueryOutput), args.Error(1)
+}
+
+func (m *MockDB) QueryOrderEventsByExternalOrderId(tableName, externalOrderId string) (*dynamodb.QueryOutput, error) {
+    args := m.Called(tableName, externalOrderId)
+    return args.Get(0).(*dynamodb.QueryOutput), args.Error(1)
 }
 
 
@@ -299,4 +315,33 @@ func TestNewAPIError(t *testing.T) {
     if apiErr.Message != "A test error occurred." {
         t.Errorf("Expected message 'A test error occurred.', got '%s'", apiErr.Message)
     }
+}
+
+
+func TestFetchByPrimaryKey(t *testing.T) {
+    mockDB := new(MockDB)
+    tableName := "OrderEvents"
+    pk := "#PK#BIGW#DB-Update1-770014-34f0-45b3-89b4-7b22fc4a43d1"
+
+    expectedOutput := &dynamodb.QueryOutput{
+        Items: []map[string]*dynamodb.AttributeValue{
+            {
+                "PK": {S: aws.String(pk)},
+                // Add other attributes as needed
+            },
+        },
+    }
+
+    mockDB.On("FetchByPrimaryKey", tableName, pk).Return(expectedOutput, nil)
+
+    result, err := mockDB.FetchByPrimaryKey(tableName, pk)
+    if err != nil {
+        t.Fatalf("Expected no error, got %v", err)
+    }
+
+    if len(result.Items) != 1 || *result.Items[0]["PK"].S != pk {
+        t.Fatalf("Expected item with PK %s, got %v", pk, result.Items)
+    }
+
+    mockDB.AssertExpectations(t)
 }
