@@ -22,7 +22,7 @@ import (
 // DatabaseInterface outlines the methods for database operations
 type DatabaseInterface interface {
 	ConnectToDatabase() error
-	InitializeTables(tableName string) error
+	InitializeTables(tableName []string) error
 	Close()
 	CreateTableIfNotExists(tableName string) error
 	CreateEventsTableIfNotExist(config TableConfig) error
@@ -61,14 +61,14 @@ func NewDatabase() (DatabaseInterface, error) {
 	return db, nil
 }
 
-func (db *Database) InitializeTables(tableName string) error {
-	log.Printf("InitializeTables")
-	log.Printf("InitializeTables %s",tableName)
-	config, err := loadConfig("table.json")
+func (db *Database) InitializeTables(tableNames []string) error {
+	log.Printf("Initialize the dynamodb Tables")
+	config, err := loadConfig("persistent/table.json")
 	if err != nil {
 		log.Fatalf("Failed to load config: %s", err)
 	}
-
+    
+	ReplaceTableNames(config, tableNames)
     // Example for a single table, repeat for others or make it dynamic based on configuration
     for _, tableConfig := range config.Tables {
 		err := db.CreateEventsTableIfNotExist(tableConfig)
@@ -79,6 +79,16 @@ func (db *Database) InitializeTables(tableName string) error {
     return nil
 }
 
+// ReplaceTableNames replaces the table names in the JSON configuration with the table names from the tableNames slice.
+func ReplaceTableNames(config *Config, tableNames []string) {
+    if len(config.Tables) != len(tableNames) {
+        log.Fatalf("The number of table names in the environment does not match the number of tables in the JSON configuration")
+    }
+
+    for i := range config.Tables {
+        config.Tables[i].TableName = tableNames[i]
+    }
+}
 // TokenFetcher is a custom implementation of the TokenFetcher interface.
 type TokenFetcher struct {
 	webIdentityToken string
@@ -355,6 +365,7 @@ func (db *Database) StoreData(tableName, pKey string, data interface{}) error {
 	return nil
 }
 
+/*
 func (db *Database) CreateEventsTableIfNotExists(tableName string) error {
 	log.Printf("CreateEventsTableIfNotExists")
 	// Check if the table already exists
@@ -454,8 +465,9 @@ func (db *Database) CreateEventsTableIfNotExists(tableName string) error {
 	log.Printf("Table %s created successfully", tableName)
 	return nil
 }
-
+*/
 // StoreData stores data in the WebhookEvents table in DynamoDB.
+
 func (db *Database) StoreEventData(tableName, eventType, eventId, lastUpdated, merchantId string, eventData interface{}, opts model.EventOptions) error {
 	log.Printf("StoreEventData")
     // Prepare the primary key and sort key
@@ -508,8 +520,8 @@ func (db *Database) StoreEventData(tableName, eventType, eventId, lastUpdated, m
 func (db *Database) StoreOrderEventData(tableName, eventType, externalOrderId, lastUpdated, merchantId string, eventData interface{}) error {
 	log.Printf("StoreEventData")
     // Prepare the primary key and sort key
-    pk := fmt.Sprintf("PK%s#%s", merchantId, externalOrderId)
-    sk := fmt.Sprintf("SK%s#%s", lastUpdated,eventType)
+    pk := fmt.Sprintf("#PK#%s#%s", merchantId, externalOrderId)
+    sk := fmt.Sprintf("#SK#%s#%s", lastUpdated, eventType)
 
     // Marshal the entire event data into a JSON string for the EventData attribute
     eventDataJSON, err := json.Marshal(eventData)
@@ -599,7 +611,7 @@ func (db *Database) CreateEventsTableIfNotExist(config TableConfig) error {
 
 func loadConfig(filename string) (*Config, error) {
 	// Convert relative path to absolute path for clarity
-	absolutePath, err := filepath.Abs("persistent/table.json")
+	absolutePath, err := filepath.Abs(filename)
 	if err != nil {
 		fmt.Printf("Error getting absolute file path: %s\n", err)
 		return nil, err

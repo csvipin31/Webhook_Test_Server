@@ -14,14 +14,15 @@ import (
 )
 
 type WebhookHandler struct {
-    db          persistent.DatabaseInterface
-    tableName   string
+    db            persistent.DatabaseInterface
+    tableNames    []string
 }
+   
 
-func NewWebhookHandler(db persistent.DatabaseInterface, tableName string) *WebhookHandler {
+func NewWebhookHandler(db persistent.DatabaseInterface, tableName []string) *WebhookHandler {
     return &WebhookHandler{
-        db:         db,
-        tableName : tableName,
+        db:           db,
+        tableNames:   tableName,
     }
 }
 
@@ -81,7 +82,7 @@ func (h *WebhookHandler) DBHealthHandler(w http.ResponseWriter, r *http.Request)
         return fmt.Errorf("method not allowed")
     }
 
-	if err := h.db.DescribeTable(h.tableName); err != nil {
+	if err := h.db.DescribeTable(h.tableNames[0]); err != nil {
         http.Error(w, "Database is not healthy: "+err.Error(), http.StatusInternalServerError)
         sendAPIError(w, NewAPIError( http.StatusInternalServerError, err, "Database is not healthy:unable to describe table"))
         return err
@@ -176,7 +177,6 @@ func (h *WebhookHandler) WebhookEvents(w http.ResponseWriter, r *http.Request) e
     }
 
     log.Printf("Received event type: %s", event.Type)
-    //tableName := os.Getenv("DYNAMODB_ORDER_TABLE_NAME")
 
     switch event.Type {
     case "order/created":
@@ -186,8 +186,7 @@ func (h *WebhookHandler) WebhookEvents(w http.ResponseWriter, r *http.Request) e
             return err
         }
         log.Printf("Received JSON order created: %+v", &orderCreatedEvent)
-        h.handleOrderCreated(h.tableName,marketplace, orderCreatedEvent)
-        h.handleOrderEventCreated(h.tableName,marketplace, orderCreatedEvent)
+        h.handleOrderEventCreated(h.tableNames[0],marketplace, orderCreatedEvent)
 	case "variant/stock-updated":
 		var variantStockUpdatedEvent model.VariantStockUpdated
         if err := json.Unmarshal(body, &variantStockUpdatedEvent); err != nil {
@@ -195,14 +194,13 @@ func (h *WebhookHandler) WebhookEvents(w http.ResponseWriter, r *http.Request) e
             return err
         }
         log.Printf("Received JSON order created: %+v", &variantStockUpdatedEvent)
-        h.handleVariantStockUpdated(h.tableName,marketplace, variantStockUpdatedEvent)
+        h.handleVariantStockUpdated(h.tableNames[1],marketplace, variantStockUpdatedEvent)
     case "product/subscribed":
 		var ProductSubscribedEvent model.ProductSubscribed
         if err := json.NewDecoder(r.Body).Decode(&ProductSubscribedEvent); err != nil {
             http.Error(w, "Failed to decode Product SubscribedEvent event: "+err.Error(), http.StatusBadRequest)
             return err
         }
-		//log.Printf("Received JSON: %s", ProductSubscribedEvent)
         h.handleProductSubscribed(marketplace,ProductSubscribedEvent)
     default:
         http.Error(w, "Unhandled event type", http.StatusBadRequest)
@@ -218,26 +216,27 @@ func (h *WebhookHandler) WebhookEvents(w http.ResponseWriter, r *http.Request) e
 
 
 
-// Utility functions
+/* Utility functions
 
-func (h *WebhookHandler) handleOrderCreated(tableName string,marketplace string, event model.OrderCreated) {
-	log.Printf("Processing Order Created event for marketplace: %s, Event ID: %s , External Order ID: %s", marketplace, event.EventId, event.ExternalOrderID)
+// func (h *WebhookHandler) handleOrderCreated(tableName string,marketplace string, event model.OrderCreated) {
+// 	log.Printf("Processing Order Created event for marketplace: %s, Event ID: %s , External Order ID: %s", marketplace, event.EventId, event.ExternalOrderID)
 
-	// Create an instance of EventOptions
-    opts := model.EventOptions{}
-	// OrderCreated has an ExternalOrderID that could be empty and not necessarily part of every event.
-    if event.ExternalOrderID != "" { // Check if ExternalOrderID is non-empty.
-        opts.ExternalOrderId = &event.ExternalOrderID // If non-empty, set it in the options.
-    }
+// 	// Create an instance of EventOptions
+//     opts := model.EventOptions{}
+// 	// OrderCreated has an ExternalOrderID that could be empty and not necessarily part of every event.
+//     if event.ExternalOrderID != "" { // Check if ExternalOrderID is non-empty.
+//         opts.ExternalOrderId = &event.ExternalOrderID // If non-empty, set it in the options.
+//     }
 
-    err := h.db.StoreEventData(tableName, event.Type, event.EventId, event.LastUpdated, marketplace, event, opts)
-    if err != nil {
-        log.Printf("Error storing event data in handleOrderCreated: %v", err)
-        return
-    }
+//     err := h.db.StoreEventData(tableName, event.Type, event.EventId, event.LastUpdated, marketplace, event, opts)
+//     if err != nil {
+//         log.Printf("Error storing event data in handleOrderCreated: %v", err)
+//         return
+//     }
 
-    log.Println("handleOrderCreated: Successfully processed order creation")
-}
+//     log.Println("handleOrderCreated: Successfully processed order creation")
+// }
+*/
 
 func (h *WebhookHandler) handleOrderEventCreated(tableName string,marketplace string, event model.OrderCreated) {
 	log.Printf("Processing Order Created event for marketplace: %s , External Order ID: %s", marketplace, event.ExternalOrderID)
@@ -271,7 +270,7 @@ func (h *WebhookHandler) handleVariantStockUpdated(tableName string,marketplace 
 }
 
 func (h *WebhookHandler) handleProductSubscribed(marketplace string,event model.ProductSubscribed) {
-	log.Printf("Processing Product Subscried event for marketplace: %s, Event ID: %s , Deal ID: %s", marketplace, event.EventId, event.DealID)
+	// log.Printf("Processing Product Subscried event for marketplace: %s, Event ID: %s , Deal ID: %s", marketplace, event.EventId, event.DealID)
     // details := make(map[string]interface{})
     // if err := json.Unmarshal(data, &details); err != nil {
     //     return
