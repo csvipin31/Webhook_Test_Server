@@ -145,14 +145,14 @@ func (h *WebhookHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) e
 func (h *WebhookHandler) WebhookEvents(w http.ResponseWriter, r *http.Request) error {
 	log.Printf("WebhookEvents ")
     if r.Method != http.MethodPost {
-        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+        sendAPIError(w, NewAPIError(http.StatusMethodNotAllowed, fmt.Errorf("method not allowed"), "Only POST requests are accepted."))
         return fmt.Errorf("method not allowed")
     }
 
     // Validate and extract merchant ID from the URL
     marketplace, err := extractMerchantId(r.URL.Path)
     if err != nil {
-        http.Error(w, err.Error(), http.StatusBadRequest)
+        sendAPIError(w, NewAPIError(http.StatusBadRequest, err, "Invalid merchant ID format."))
         return err
     }
 
@@ -160,6 +160,7 @@ func (h *WebhookHandler) WebhookEvents(w http.ResponseWriter, r *http.Request) e
     body, err := io.ReadAll(r.Body)
     if err != nil {
         http.Error(w, "Error reading request body: "+err.Error(), http.StatusInternalServerError)
+        sendAPIError(w, NewAPIError(http.StatusInternalServerError, err, "Error reading request body"))
         return err
     }
     
@@ -170,7 +171,7 @@ func (h *WebhookHandler) WebhookEvents(w http.ResponseWriter, r *http.Request) e
 	//Decode the JSON into a generic map to identify the event type
     var event model.EventTypeHolder
     if err := json.Unmarshal(body, &event); err != nil {
-        http.Error(w, "Failed to decode JSON: "+err.Error(), http.StatusBadRequest)
+        sendAPIError(w, NewAPIError(http.StatusBadRequest, err, "Failed to decode JSON:"))
         return err
     }
 
@@ -186,6 +187,7 @@ func (h *WebhookHandler) WebhookEvents(w http.ResponseWriter, r *http.Request) e
         }
         log.Printf("Received JSON order created: %+v", &orderCreatedEvent)
         h.handleOrderCreated(h.tableName,marketplace, orderCreatedEvent)
+        h.handleOrderEventCreated(h.tableName,marketplace, orderCreatedEvent)
 	case "variant/stock-updated":
 		var variantStockUpdatedEvent model.VariantStockUpdated
         if err := json.Unmarshal(body, &variantStockUpdatedEvent); err != nil {
@@ -229,6 +231,18 @@ func (h *WebhookHandler) handleOrderCreated(tableName string,marketplace string,
     }
 
     err := h.db.StoreEventData(tableName, event.Type, event.EventId, event.LastUpdated, marketplace, event, opts)
+    if err != nil {
+        log.Printf("Error storing event data in handleOrderCreated: %v", err)
+        return
+    }
+
+    log.Println("handleOrderCreated: Successfully processed order creation")
+}
+
+func (h *WebhookHandler) handleOrderEventCreated(tableName string,marketplace string, event model.OrderCreated) {
+	log.Printf("Processing Order Created event for marketplace: %s , External Order ID: %s", marketplace, event.ExternalOrderID)
+
+    err := h.db.StoreOrderEventData(tableName, event.Type, event.ExternalOrderID, event.LastUpdated, marketplace, event)
     if err != nil {
         log.Printf("Error storing event data in handleOrderCreated: %v", err)
         return

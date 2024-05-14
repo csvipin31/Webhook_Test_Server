@@ -13,6 +13,7 @@ import (
 
 	"webhook_test_server/handler"
 	"webhook_test_server/model"
+	"webhook_test_server/persistent"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -37,6 +38,11 @@ func (m *MockDB) CreateTableIfNotExists(tableName string) error {
     return args.Error(0)
 }
 
+func (m *MockDB) CreateEventsTableIfNotExist(config persistent.TableConfig) error {
+    args := m.Called(config)
+    return args.Error(0)
+}
+
 func (m *MockDB) StoreData(tableName, pKey string, data interface{}) error {
     args := m.Called(tableName, pKey, data)
     return args.Error(0)
@@ -54,6 +60,11 @@ func (m *MockDB) InitializeTables(tableName string) error {
 
 func (m *MockDB) StoreEventData(tableName, eventType, eventId, lastUpdated, merchantId string, eventData interface{}, opts model.EventOptions) error {
     args := m.Called(tableName, eventType, eventId, lastUpdated, merchantId, eventData,opts)
+    return args.Error(0)
+}
+
+func (m *MockDB) StoreOrderEventData(tableName, eventType, externalOrderId, lastUpdated, merchantId string, eventData interface{}) error {
+    args := m.Called(tableName, eventType, externalOrderId, lastUpdated, merchantId, eventData)
     return args.Error(0)
 }
 

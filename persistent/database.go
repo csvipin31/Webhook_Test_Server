@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"webhook_test_server/model"
 
@@ -24,15 +25,30 @@ type DatabaseInterface interface {
 	InitializeTables(tableName string) error
 	Close()
 	CreateTableIfNotExists(tableName string) error
+	CreateEventsTableIfNotExist(config TableConfig) error
 	StoreData(tableName, pKey string, data interface{}) error
 	DescribeTable(tableName string) error
 	StoreEventData(tableName, eventType, eventId, lastUpdated, merchantId string, eventData interface{},opts model.EventOptions) error
+	StoreOrderEventData(tableName, eventType,externalOrderId, lastUpdated, merchantId string, eventData interface{}) error
 }
 
 
 // Database represents the database connection.
 type Database struct {
 	svc *dynamodb.DynamoDB
+}
+
+type TableConfig struct {
+	TableName             string                     `json:"tableName"`
+	AttributeDefinitions  []*dynamodb.AttributeDefinition `json:"attributeDefinitions"`
+	KeySchema             []*dynamodb.KeySchemaElement     `json:"keySchema"`
+	GlobalSecondaryIndexes []*dynamodb.GlobalSecondaryIndex `json:"globalSecondaryIndexes"`
+	ReadCapacityUnits     int64 `json:"readCapacityUnits"`
+	WriteCapacityUnits    int64 `json:"writeCapacityUnits"`
+}
+
+type Config struct {
+	Tables []TableConfig `json:"tables"`
 }
 
 // NewDatabase creates a new database connection based on the environment configuration
@@ -48,12 +64,18 @@ func NewDatabase() (DatabaseInterface, error) {
 func (db *Database) InitializeTables(tableName string) error {
 	log.Printf("InitializeTables")
 	log.Printf("InitializeTables %s",tableName)
+	config, err := loadConfig("table.json")
+	if err != nil {
+		log.Fatalf("Failed to load config: %s", err)
+	}
+
     // Example for a single table, repeat for others or make it dynamic based on configuration
-    err := db.CreateEventsTableIfNotExists(tableName)
-    if err != nil {
-        log.Printf("Failed to initialize table: %v", err)
-        return err
-    }
+    for _, tableConfig := range config.Tables {
+		err := db.CreateEventsTableIfNotExist(tableConfig)
+		if err != nil {
+			log.Printf("Failed to create table %s: %s", tableConfig.TableName, err)
+		}
+	}
     return nil
 }
 
@@ -480,4 +502,123 @@ func (db *Database) StoreEventData(tableName, eventType, eventId, lastUpdated, m
 
     log.Printf("Data successfully stored in table : %v",tableName)
     return nil
+}
+
+// StoreData stores data in the WebhookEvents table in DynamoDB.
+func (db *Database) StoreOrderEventData(tableName, eventType, externalOrderId, lastUpdated, merchantId string, eventData interface{}) error {
+	log.Printf("StoreEventData")
+    // Prepare the primary key and sort key
+    pk := fmt.Sprintf("PK%s#%s", merchantId, externalOrderId)
+    sk := fmt.Sprintf("SK%s#%s", lastUpdated,eventType)
+
+    // Marshal the entire event data into a JSON string for the EventData attribute
+    eventDataJSON, err := json.Marshal(eventData)
+    if err != nil {
+        log.Printf("Failed to marshal event data: %v", err)
+        return err
+    }
+
+    // Prepare the attribute values for DynamoDB
+    item := map[string]*dynamodb.AttributeValue{
+        "PK":        			{S: aws.String(pk)},
+        "SK":        			{S: aws.String(sk)},
+		"ExternalOrderId": 		{S: aws.String(externalOrderId)},
+		"LastUpdated": 			{S: aws.String(lastUpdated)},
+        "EventType": 			{S: aws.String(eventType)},
+        "EventData": 			{S: aws.String(string(eventDataJSON))},
+    }
+
+    // Create the PutItem input
+    input := &dynamodb.PutItemInput{
+        TableName: aws.String(tableName),
+        Item:      item,
+    }
+
+    // Perform the PutItem operation
+    _, err = db.svc.PutItem(input)
+    if err != nil {
+        log.Printf("Failed to put item in table :%v, %v",tableName, err)
+        return err
+    }
+
+    log.Printf("Data successfully stored in table : %v",tableName)
+    return nil
+}
+
+func (db *Database) CreateEventsTableIfNotExist(config TableConfig) error {
+	log.Printf("CreateEventsTableIfNotExists")
+	// Check if the table already exists
+	exists, err := db.tableExists(config.TableName)
+	if err != nil {
+		return err
+	}
+	if exists {
+		log.Printf("Table %s already exists", config.TableName)
+		return nil
+	}
+
+	// Ensure each GSI has a properly defined Projection
+	for i := range config.GlobalSecondaryIndexes {
+		if config.GlobalSecondaryIndexes[i].Projection == nil {
+			config.GlobalSecondaryIndexes[i].Projection = &dynamodb.Projection{
+				ProjectionType: aws.String("ALL"), // or "KEYS_ONLY", "INCLUDE"
+				// Uncomment and specify the attributes if ProjectionType is "INCLUDE"
+				// NonKeyAttributes: aws.StringSlice([]string{"Attribute1", "Attribute2"}),
+				
+			}
+		}
+
+		// Check and set default Provisioned Throughput if it's not specified
+    	if config.GlobalSecondaryIndexes[i].ProvisionedThroughput == nil {
+        	config.GlobalSecondaryIndexes[i].ProvisionedThroughput = &dynamodb.ProvisionedThroughput{
+            	ReadCapacityUnits:  aws.Int64(10), // Default read capacity
+            	WriteCapacityUnits: aws.Int64(10), // Default write capacity
+        	}
+    	}
+	}
+
+		// Create the table
+	_, err = db.svc.CreateTable(&dynamodb.CreateTableInput{
+		TableName:            aws.String(config.TableName),
+		AttributeDefinitions: config.AttributeDefinitions,
+		KeySchema:            config.KeySchema,
+		GlobalSecondaryIndexes: config.GlobalSecondaryIndexes,
+		ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+			ReadCapacityUnits:  aws.Int64(config.ReadCapacityUnits),
+			WriteCapacityUnits: aws.Int64(config.WriteCapacityUnits),
+		},
+	})
+	
+    if err != nil {
+		return err
+	}
+
+	log.Printf("Table %s created successfully", config.TableName)
+	return nil
+}
+
+func loadConfig(filename string) (*Config, error) {
+	// Convert relative path to absolute path for clarity
+	absolutePath, err := filepath.Abs("persistent/table.json")
+	if err != nil {
+		fmt.Printf("Error getting absolute file path: %s\n", err)
+		return nil, err
+	}
+	fmt.Printf("Reading configuration from: %s\n", absolutePath)
+
+	// Read the file
+	data, err := os.ReadFile(absolutePath)
+	if err != nil {
+		fmt.Printf("Error reading file: %s\n", err)
+		return nil, err
+	}
+
+	// Unmarshal JSON data
+	var config Config
+	if err = json.Unmarshal(data, &config); err != nil {
+		fmt.Printf("Error parsing JSON data: %s\n", err)
+		return nil, err
+	}
+
+	return &config, nil
 }

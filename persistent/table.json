@@ -1,0 +1,118 @@
+{
+    "tables": [
+        {
+            "tableName": "EventsWebhook",
+            "attributeDefinitions": [
+                {
+                    "attributeName": "PK",
+                    "attributeType": "S"
+                },
+                {
+                    "attributeName": "SK",
+                    "attributeType": "S"
+                },
+                {
+                    "attributeName": "DealId",
+                    "attributeType": "S"
+                },
+                {
+                    "attributeName": "ExternalOrderId",
+                    "attributeType": "S"
+                }
+            ],
+            "keySchema": [
+                {
+                    "attributeName": "PK",
+                    "keyType": "HASH"
+                },
+                {
+                    "attributeName": "SK",
+                    "keyType": "RANGE"
+                }
+            ],
+            "globalSecondaryIndexes": [
+                {
+                    "indexName": "DealIdIndex",
+                    "keySchema": [
+                        {
+                            "attributeName": "DealId",
+                            "keyType": "HASH"
+                        },
+                        {
+                            "attributeName": "SK",
+                            "keyType": "RANGE"
+                        }
+                    ],
+                    "projectionType": "ALL",
+                    "readCapacityUnits": 10,
+                    "writeCapacityUnits": 10
+                },
+                {
+                    "indexName": "ExternalOrderIdIndex",
+                    "keySchema": [
+                        {
+                            "attributeName": "ExternalOrderId",
+                            "keyType": "HASH"
+                        },
+                        {
+                            "attributeName": "SK",
+                            "keyType": "RANGE"
+                        }
+                    ],
+                    "projectionType": "ALL",
+                    "readCapacityUnits": 10,
+                    "writeCapacityUnits": 10
+                }
+            ],
+            "readCapacityUnits": 5,
+            "writeCapacityUnits": 5
+        },
+        {
+            "tableName": "OrderEvents",
+            "attributeDefinitions": [
+                {
+                    "attributeName": "PK",
+                    "attributeType": "S"
+                },
+                {
+                    "attributeName": "SK",
+                    "attributeType": "S"
+                },
+                {
+                    "attributeName": "ExternalOrderId",
+                    "attributeType": "S"
+                }
+            ],
+            "keySchema": [
+                {
+                    "attributeName": "PK",
+                    "keyType": "HASH"
+                },
+                {
+                    "attributeName": "SK",
+                    "keyType": "RANGE"
+                }
+            ],
+            "globalSecondaryIndexes": [
+                {
+                    "indexName": "ExternalOrderIdIndex",
+                    "keySchema": [
+                        {
+                            "attributeName": "ExternalOrderId",
+                            "keyType": "HASH"
+                        },
+                        {
+                            "attributeName": "SK",
+                            "keyType": "RANGE"
+                        }
+                    ],
+                    "projectionType": "ALL",
+                    "readCapacityUnits": 10,
+                    "writeCapacityUnits": 10
+                }
+            ],
+            "readCapacityUnits": 5,
+            "writeCapacityUnits": 5
+        }
+    ]
+}
