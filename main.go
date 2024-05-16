@@ -13,13 +13,18 @@ import (
 )
 
 func main() {
-	
+
 	if err := godotenv.Load(); err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
 	port := os.Getenv("SERVER_PORT")
 	log.Println("server listening on port: ", port)
+
+	endpoint := os.Getenv("DYNAMODB_ENDPOINT")
+	region := os.Getenv("DYNAMODB_REGION")
+	log.Println("### MAIN LOCAL_DYNAMODB.", region)
+	log.Println("### MAIN LOCAL_DYNAMODB.", endpoint)
 
 	// Initialize the database
 	db, err := persistent.NewDatabase()
@@ -29,26 +34,25 @@ func main() {
 	defer db.Close()
 
 	// Define the environment variable keys
-    envVars := []string{
-        "DYNAMODB_ORDER_TABLE_NAME",
-        "DYNAMODB_PRODUCT_TABLE_NAME",
-    }
+	envVars := []string{
+		"DYNAMODB_ORDER_TABLE_NAME",
+		"DYNAMODB_PRODUCT_TABLE_NAME",
+	}
 
-    // Load the table names from environment variables
-    tableNames := LoadTableNames(envVars...)
+	// Load the table names from environment variables
+	tableNames := LoadTableNames(envVars...)
 
-    // Example usage: Print the loaded table names
-    for _, tableName := range tableNames {
-        log.Printf("Loaded table name: %s", tableName)
-    }
-    if err := db.InitializeTables(tableNames); err != nil {
-        log.Fatalf("failed to initialize tables:%s: %v", tableNames,err)
-    }
-
+	// Example usage: Print the loaded table names
+	for _, tableName := range tableNames {
+		log.Printf("Loaded table name: %s", tableName)
+	}
+	if err := db.InitializeTables(tableNames); err != nil {
+		log.Fatalf("failed to initialize tables:%s: %v", tableNames, err)
+	}
 
 	// Create the webhook handler with the database dependency
-    webhookHandler := handler.NewWebhookHandler(db,tableNames)
-    handler.SetupRoutes(webhookHandler)
+	webhookHandler := handler.NewWebhookHandler(db, tableNames)
+	handler.SetupRoutes(webhookHandler)
 
 	log.Printf("Server starting on port: %s", port)
 	err = http.ListenAndServe(":"+port, nil)
@@ -61,20 +65,19 @@ func main() {
 	}
 }
 
-
 func LoadTableNames(envVars ...string) []string {
-    var tableNames []string
+	var tableNames []string
 
-    for _, envVar := range envVars {
-        tableName := os.Getenv(envVar)
-        if tableName != "" {
-            tableNames = append(tableNames, tableName)
-        }
-    }
+	for _, envVar := range envVars {
+		tableName := os.Getenv(envVar)
+		if tableName != "" {
+			tableNames = append(tableNames, tableName)
+		}
+	}
 
-    if len(tableNames) == 0 {
-        log.Fatalf("No valid table names provided in environment variables")
-    }
+	if len(tableNames) == 0 {
+		log.Fatalf("No valid table names provided in environment variables")
+	}
 
-    return tableNames
+	return tableNames
 }

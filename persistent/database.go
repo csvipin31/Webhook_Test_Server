@@ -28,13 +28,12 @@ type DatabaseInterface interface {
 	CreateEventsTableIfNotExist(config TableConfig) error
 	StoreData(tableName, pKey string, data interface{}) error
 	DescribeTable(tableName string) error
-	StoreEventData(tableName, eventType, eventId, lastUpdated, merchantId string, eventData interface{},opts model.EventOptions) error
-	StoreOrderEventData(tableName, eventType,externalOrderId, lastUpdated, merchantId string, eventData interface{}) error
+	StoreEventData(tableName, eventType, eventId, lastUpdated, merchantId string, eventData interface{}, opts model.EventOptions) error
+	StoreOrderEventData(tableName, eventType, externalOrderId, lastUpdated, merchantId string, eventData interface{}) error
 	FetchByPrimaryKey(tableName, pk string) (*dynamodb.QueryOutput, error)
 	FetchByGSI(tableName, gsiName string, keyConditions map[string]*dynamodb.Condition) (*dynamodb.QueryOutput, error)
-	QueryOrderEventsByExternalOrderId(tableName,externalOrderId string) (*dynamodb.QueryOutput, error)
+	QueryOrderEventsByExternalOrderId(tableName, externalOrderId string) (*dynamodb.QueryOutput, error)
 }
-
 
 // Database represents the database connection.
 type Database struct {
@@ -42,18 +41,17 @@ type Database struct {
 }
 
 type TableConfig struct {
-	TableName             string                     `json:"tableName"`
-	AttributeDefinitions  []*dynamodb.AttributeDefinition `json:"attributeDefinitions"`
-	KeySchema             []*dynamodb.KeySchemaElement     `json:"keySchema"`
+	TableName              string                           `json:"tableName"`
+	AttributeDefinitions   []*dynamodb.AttributeDefinition  `json:"attributeDefinitions"`
+	KeySchema              []*dynamodb.KeySchemaElement     `json:"keySchema"`
 	GlobalSecondaryIndexes []*dynamodb.GlobalSecondaryIndex `json:"globalSecondaryIndexes"`
-	ReadCapacityUnits     int64 `json:"readCapacityUnits"`
-	WriteCapacityUnits    int64 `json:"writeCapacityUnits"`
+	ReadCapacityUnits      int64                            `json:"readCapacityUnits"`
+	WriteCapacityUnits     int64                            `json:"writeCapacityUnits"`
 }
 
 type Config struct {
 	Tables []TableConfig `json:"tables"`
 }
-
 
 // NewDatabase creates a new database connection based on the environment configuration
 func NewDatabase() (DatabaseInterface, error) {
@@ -71,28 +69,29 @@ func (db *Database) InitializeTables(tableNames []string) error {
 	if err != nil {
 		log.Fatalf("Failed to load config: %s", err)
 	}
-    
+
 	ReplaceTableNames(config, tableNames)
-    // Example for a single table, repeat for others or make it dynamic based on configuration
-    for _, tableConfig := range config.Tables {
+	// Example for a single table, repeat for others or make it dynamic based on configuration
+	for _, tableConfig := range config.Tables {
 		err := db.CreateEventsTableIfNotExist(tableConfig)
 		if err != nil {
 			log.Printf("Failed to create table %s: %s", tableConfig.TableName, err)
 		}
 	}
-    return nil
+	return nil
 }
 
 // ReplaceTableNames replaces the table names in the JSON configuration with the table names from the tableNames slice.
 func ReplaceTableNames(config *Config, tableNames []string) {
-    if len(config.Tables) != len(tableNames) {
-        log.Fatalf("The number of table names in the environment does not match the number of tables in the JSON configuration")
-    }
+	if len(config.Tables) != len(tableNames) {
+		log.Fatalf("The number of table names in the environment does not match the number of tables in the JSON configuration")
+	}
 
-    for i := range config.Tables {
-        config.Tables[i].TableName = tableNames[i]
-    }
+	for i := range config.Tables {
+		config.Tables[i].TableName = tableNames[i]
+	}
 }
+
 // TokenFetcher is a custom implementation of the TokenFetcher interface.
 type TokenFetcher struct {
 	webIdentityToken string
@@ -204,9 +203,10 @@ func ConnectToAWSDynamoDB() (*dynamodb.DynamoDB, error) {
 func ConnectToLocalDynamoDB() (*dynamodb.DynamoDB, error) {
 	endpoint := os.Getenv("DYNAMODB_ENDPOINT")
 	region := os.Getenv("DYNAMODB_REGION")
+	log.Println("### LOCAL_DYNAMODB.", region)
 	log.Println("### LOCAL_DYNAMODB.", endpoint)
 	if endpoint == "" {
-		endpoint = "http://localhost:8001" // Default local endpoint
+		endpoint = "http://localhost:8000" // Default local endpoint
 	}
 
 	sess := session.Must(session.NewSession(&aws.Config{
@@ -222,7 +222,7 @@ func ConnectToLocalDynamoDB() (*dynamodb.DynamoDB, error) {
 }
 
 // ConnectToDatabase establishes a connection to DynamoDB, either locally or via AWS depending on the environment
-func (db *Database)ConnectToDatabase() error {
+func (db *Database) ConnectToDatabase() error {
 	// Read role ARN and region from environment variables
 	roleAvailable := CheckAWSRoleAvailability()
 	log.Println("### ConnectToDatabase.", roleAvailable)
@@ -474,91 +474,90 @@ func (db *Database) CreateEventsTableIfNotExists(tableName string) error {
 
 func (db *Database) StoreEventData(tableName, eventType, eventId, lastUpdated, merchantId string, eventData interface{}, opts model.EventOptions) error {
 	log.Printf("StoreEventData")
-    // Prepare the primary key and sort key
-    pk := fmt.Sprintf("PK%s#%s#%s", merchantId, eventType, eventId)
-    sk := fmt.Sprintf("SK%s", lastUpdated)
+	// Prepare the primary key and sort key
+	pk := fmt.Sprintf("PK%s#%s#%s", merchantId, eventType, eventId)
+	sk := fmt.Sprintf("SK%s", lastUpdated)
 
-    // Marshal the entire event data into a JSON string for the EventData attribute
-    eventDataJSON, err := json.Marshal(eventData)
-    if err != nil {
-        log.Printf("Failed to marshal event data: %v", err)
-        return err
-    }
+	// Marshal the entire event data into a JSON string for the EventData attribute
+	eventDataJSON, err := json.Marshal(eventData)
+	if err != nil {
+		log.Printf("Failed to marshal event data: %v", err)
+		return err
+	}
 
-    // Prepare the attribute values for DynamoDB
-    item := map[string]*dynamodb.AttributeValue{
-        "PK":        {S: aws.String(pk)},
-        "SK":        {S: aws.String(sk)},
-        "EventID":   {S: aws.String(eventId)},
-        "EventType": {S: aws.String(eventType)},
-        "EventData": {S: aws.String(string(eventDataJSON))},
-    }
+	// Prepare the attribute values for DynamoDB
+	item := map[string]*dynamodb.AttributeValue{
+		"PK":        {S: aws.String(pk)},
+		"SK":        {S: aws.String(sk)},
+		"EventID":   {S: aws.String(eventId)},
+		"EventType": {S: aws.String(eventType)},
+		"EventData": {S: aws.String(string(eventDataJSON))},
+	}
 
+	// Add DealId and ExternalOrderId to the item if available
+	if opts.DealId != nil {
+		item["DealId"] = &dynamodb.AttributeValue{S: aws.String(*opts.DealId)}
+	}
+	if opts.ExternalOrderId != nil {
+		item["ExternalOrderId"] = &dynamodb.AttributeValue{S: aws.String(*opts.ExternalOrderId)}
+	}
 
-    // Add DealId and ExternalOrderId to the item if available
-    if opts.DealId != nil {
-        item["DealId"] = &dynamodb.AttributeValue{S: aws.String(*opts.DealId)}
-    }
-    if opts.ExternalOrderId != nil {
-        item["ExternalOrderId"] = &dynamodb.AttributeValue{S: aws.String(*opts.ExternalOrderId)}
-    }
+	// Create the PutItem input
+	input := &dynamodb.PutItemInput{
+		TableName: aws.String(tableName),
+		Item:      item,
+	}
 
-    // Create the PutItem input
-    input := &dynamodb.PutItemInput{
-        TableName: aws.String(tableName),
-        Item:      item,
-    }
+	// Perform the PutItem operation
+	_, err = db.svc.PutItem(input)
+	if err != nil {
+		log.Printf("Failed to put item in table :%v, %v", tableName, err)
+		return err
+	}
 
-    // Perform the PutItem operation
-    _, err = db.svc.PutItem(input)
-    if err != nil {
-        log.Printf("Failed to put item in table :%v, %v",tableName, err)
-        return err
-    }
-
-    log.Printf("Data successfully stored in table : %v",tableName)
-    return nil
+	log.Printf("Data successfully stored in table : %v", tableName)
+	return nil
 }
 
 // StoreData stores data in the WebhookEvents table in DynamoDB.
 func (db *Database) StoreOrderEventData(tableName, eventType, externalOrderId, lastUpdated, merchantId string, eventData interface{}) error {
 	log.Printf("StoreEventData")
-    // Prepare the primary key and sort key
-    pk := fmt.Sprintf("#PK#%s#%s", merchantId, externalOrderId)
-    sk := fmt.Sprintf("#SK#%s#%s", lastUpdated, eventType)
+	// Prepare the primary key and sort key
+	pk := fmt.Sprintf("#PK#%s#%s", merchantId, externalOrderId)
+	sk := fmt.Sprintf("#SK#%s#%s", lastUpdated, eventType)
 
-    // Marshal the entire event data into a JSON string for the EventData attribute
-    eventDataJSON, err := json.Marshal(eventData)
-    if err != nil {
-        log.Printf("Failed to marshal event data: %v", err)
-        return err
-    }
+	// Marshal the entire event data into a JSON string for the EventData attribute
+	eventDataJSON, err := json.Marshal(eventData)
+	if err != nil {
+		log.Printf("Failed to marshal event data: %v", err)
+		return err
+	}
 
-    // Prepare the attribute values for DynamoDB
-    item := map[string]*dynamodb.AttributeValue{
-        "PK":        			{S: aws.String(pk)},
-        "SK":        			{S: aws.String(sk)},
-		"ExternalOrderId": 		{S: aws.String(externalOrderId)},
-		"LastUpdated": 			{S: aws.String(lastUpdated)},
-        "EventType": 			{S: aws.String(eventType)},
-        "EventData": 			{S: aws.String(string(eventDataJSON))},
-    }
+	// Prepare the attribute values for DynamoDB
+	item := map[string]*dynamodb.AttributeValue{
+		"PK":              {S: aws.String(pk)},
+		"SK":              {S: aws.String(sk)},
+		"ExternalOrderId": {S: aws.String(externalOrderId)},
+		"LastUpdated":     {S: aws.String(lastUpdated)},
+		"EventType":       {S: aws.String(eventType)},
+		"EventData":       {S: aws.String(string(eventDataJSON))},
+	}
 
-    // Create the PutItem input
-    input := &dynamodb.PutItemInput{
-        TableName: aws.String(tableName),
-        Item:      item,
-    }
+	// Create the PutItem input
+	input := &dynamodb.PutItemInput{
+		TableName: aws.String(tableName),
+		Item:      item,
+	}
 
-    // Perform the PutItem operation
-    _, err = db.svc.PutItem(input)
-    if err != nil {
-        log.Printf("Failed to put item in table :%v, %v",tableName, err)
-        return err
-    }
+	// Perform the PutItem operation
+	_, err = db.svc.PutItem(input)
+	if err != nil {
+		log.Printf("Failed to put item in table :%v, %v", tableName, err)
+		return err
+	}
 
-    log.Printf("Data successfully stored in table : %v",tableName)
-    return nil
+	log.Printf("Data successfully stored in table : %v", tableName)
+	return nil
 }
 
 func (db *Database) CreateEventsTableIfNotExist(config TableConfig) error {
@@ -580,32 +579,32 @@ func (db *Database) CreateEventsTableIfNotExist(config TableConfig) error {
 				ProjectionType: aws.String("ALL"), // or "KEYS_ONLY", "INCLUDE"
 				// Uncomment and specify the attributes if ProjectionType is "INCLUDE"
 				// NonKeyAttributes: aws.StringSlice([]string{"Attribute1", "Attribute2"}),
-				
+
 			}
 		}
 
 		// Check and set default Provisioned Throughput if it's not specified
-    	if config.GlobalSecondaryIndexes[i].ProvisionedThroughput == nil {
-        	config.GlobalSecondaryIndexes[i].ProvisionedThroughput = &dynamodb.ProvisionedThroughput{
-            	ReadCapacityUnits:  aws.Int64(10), // Default read capacity
-            	WriteCapacityUnits: aws.Int64(10), // Default write capacity
-        	}
-    	}
+		if config.GlobalSecondaryIndexes[i].ProvisionedThroughput == nil {
+			config.GlobalSecondaryIndexes[i].ProvisionedThroughput = &dynamodb.ProvisionedThroughput{
+				ReadCapacityUnits:  aws.Int64(10), // Default read capacity
+				WriteCapacityUnits: aws.Int64(10), // Default write capacity
+			}
+		}
 	}
 
-		// Create the table
+	// Create the table
 	_, err = db.svc.CreateTable(&dynamodb.CreateTableInput{
-		TableName:            aws.String(config.TableName),
-		AttributeDefinitions: config.AttributeDefinitions,
-		KeySchema:            config.KeySchema,
+		TableName:              aws.String(config.TableName),
+		AttributeDefinitions:   config.AttributeDefinitions,
+		KeySchema:              config.KeySchema,
 		GlobalSecondaryIndexes: config.GlobalSecondaryIndexes,
 		ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
 			ReadCapacityUnits:  aws.Int64(config.ReadCapacityUnits),
 			WriteCapacityUnits: aws.Int64(config.WriteCapacityUnits),
 		},
 	})
-	
-    if err != nil {
+
+	if err != nil {
 		return err
 	}
 
@@ -640,54 +639,54 @@ func loadConfig(filename string) (*Config, error) {
 }
 
 func (db *Database) FetchByPrimaryKey(tableName, pk string) (*dynamodb.QueryOutput, error) {
-    input := &dynamodb.QueryInput{
-        TableName: aws.String(tableName),
-        KeyConditionExpression: aws.String("#pk = :pkval"),
-        ExpressionAttributeNames: map[string]*string{
-            "#pk": aws.String("PK"),
-        },
-        ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-            ":pkval": {
-                S: aws.String(pk),
-            },
-        },
-        ScanIndexForward: aws.Bool(false), // Set to false if you want to sort in descending order
-    }
+	input := &dynamodb.QueryInput{
+		TableName:              aws.String(tableName),
+		KeyConditionExpression: aws.String("#pk = :pkval"),
+		ExpressionAttributeNames: map[string]*string{
+			"#pk": aws.String("PK"),
+		},
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":pkval": {
+				S: aws.String(pk),
+			},
+		},
+		ScanIndexForward: aws.Bool(false), // Set to false if you want to sort in descending order
+	}
 
-    result, err := db.svc.Query(input)
-    if err != nil {
-        return nil, fmt.Errorf("failed to fetch items by primary key without SK: %w", err)
-    }
+	result, err := db.svc.Query(input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch items by primary key without SK: %w", err)
+	}
 
-    return result, nil
+	return result, nil
 }
 
 func (db *Database) FetchByGSI(tableName, gsiName string, keyConditions map[string]*dynamodb.Condition) (*dynamodb.QueryOutput, error) {
-    input := &dynamodb.QueryInput{
-        TableName: aws.String(tableName),
-        IndexName: aws.String(gsiName),
-        KeyConditions: keyConditions,
-    }
+	input := &dynamodb.QueryInput{
+		TableName:     aws.String(tableName),
+		IndexName:     aws.String(gsiName),
+		KeyConditions: keyConditions,
+	}
 
-    result, err := db.svc.Query(input)
-    if err != nil {
-        return nil, fmt.Errorf("failed to fetch item by GSI: %w", err)
-    }
+	result, err := db.svc.Query(input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch item by GSI: %w", err)
+	}
 
-    return result, nil
+	return result, nil
 }
 
-func (db *Database) QueryOrderEventsByExternalOrderId(tableName,externalOrderId string) (*dynamodb.QueryOutput, error) {
-    keyConditions := map[string]*dynamodb.Condition{
-        "ExternalOrderId": {
-            ComparisonOperator: aws.String("EQ"),
-            AttributeValueList: []*dynamodb.AttributeValue{
-                {
-                    S: aws.String(externalOrderId),
-                },
-            },
-        },
-    }
+func (db *Database) QueryOrderEventsByExternalOrderId(tableName, externalOrderId string) (*dynamodb.QueryOutput, error) {
+	keyConditions := map[string]*dynamodb.Condition{
+		"ExternalOrderId": {
+			ComparisonOperator: aws.String("EQ"),
+			AttributeValueList: []*dynamodb.AttributeValue{
+				{
+					S: aws.String(externalOrderId),
+				},
+			},
+		},
+	}
 
-    return db.FetchByGSI(tableName, "ExternalOrderIdIndex", keyConditions)
+	return db.FetchByGSI(tableName, "ExternalOrderIdIndex", keyConditions)
 }
