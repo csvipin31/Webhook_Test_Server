@@ -1,3 +1,3 @@
 .env
 .vscode
-.my-dynamodb-data
+/my-dynamodb-data/
