@@ -1,0 +1,26 @@
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: dynamodb-local
+    hostname: dynamodb
+    restart: always
+    volumes:
+      -  ./docker/dynamodb:/home/dynamodblocal/data
+    ports:
+      - "8000:8000"
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath ./data"
+    working_dir: /home/dynamodblocal
+
+  app:
+    build: .
+    container_name: go-server
+    ports:
+      - "${SERVER_PORT}:${SERVER_PORT}"
+    environment:
+      - DYNAMODB_REGION=${DYNAMODB_REGION}
+      - DYNAMODB_ORDER_TABLE_NAME=${DYNAMODB_ORDER_TABLE_NAME}
+      - DYNAMODB_PRODUCT_TABLE_NAME=${DYNAMODB_PRODUCT_TABLE_NAME}
+      - SERVER_PORT=${SERVER_PORT}
+      - DYNAMODB_ENDPOINT=${DYNAMODB_ENDPOINT}
+    depends_on:
+      - dynamodb-local
