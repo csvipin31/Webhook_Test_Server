@@ -23,327 +23,477 @@ import (
 
 // Mock for the DatabaseInterface
 type MockDB struct {
-    mock.Mock
+	mock.Mock
 }
 
 func (m *MockDB) ConnectToDatabase() error {
-    args := m.Called()
-    return args.Error(0)
+	args := m.Called()
+	return args.Error(0)
 }
 
 func (m *MockDB) Close() {
-    m.Called()
+	m.Called()
 }
 
 func (m *MockDB) CreateTableIfNotExists(tableName string) error {
-    args := m.Called(tableName)
-    return args.Error(0)
+	args := m.Called(tableName)
+	return args.Error(0)
 }
 
 func (m *MockDB) CreateEventsTableIfNotExist(config persistent.TableConfig) error {
-    args := m.Called(config)
-    return args.Error(0)
+	args := m.Called(config)
+	return args.Error(0)
 }
 
 func (m *MockDB) StoreData(tableName, pKey string, data interface{}) error {
-    args := m.Called(tableName, pKey, data)
-    return args.Error(0)
+	args := m.Called(tableName, pKey, data)
+	return args.Error(0)
 }
 
 func (m *MockDB) DescribeTable(tableName string) error {
-    args := m.Called(tableName)
-    return args.Error(0)
+	args := m.Called(tableName)
+	return args.Error(0)
 }
 
 func (m *MockDB) InitializeTables(tableName []string) error {
-    args := m.Called(tableName)
-    return args.Error(0)
+	args := m.Called(tableName)
+	return args.Error(0)
 }
 
 func (m *MockDB) StoreEventData(tableName, eventType, eventId, lastUpdated, merchantId string, eventData interface{}, opts model.EventOptions) error {
-    args := m.Called(tableName, eventType, eventId, lastUpdated, merchantId, eventData,opts)
-    return args.Error(0)
+	args := m.Called(tableName, eventType, eventId, lastUpdated, merchantId, eventData, opts)
+	return args.Error(0)
 }
 
 func (m *MockDB) StoreOrderEventData(tableName, eventType, externalOrderId, lastUpdated, merchantId string, eventData interface{}) error {
-    args := m.Called(tableName, eventType, externalOrderId, lastUpdated, merchantId, eventData)
-    return args.Error(0)
+	args := m.Called(tableName, eventType, externalOrderId, lastUpdated, merchantId, eventData)
+	return args.Error(0)
 }
 func (m *MockDB) FetchByPrimaryKey(tableName, pk string) (*dynamodb.QueryOutput, error) {
-    args := m.Called(tableName, pk)
-    return args.Get(0).(*dynamodb.QueryOutput), args.Error(1)
+	args := m.Called(tableName, pk)
+	return args.Get(0).(*dynamodb.QueryOutput), args.Error(1)
 }
 
 func (m *MockDB) FetchByGSI(tableName, gsiName string, keyConditions map[string]*dynamodb.Condition) (*dynamodb.QueryOutput, error) {
-    args := m.Called(tableName, gsiName, keyConditions)
-    return args.Get(0).(*dynamodb.QueryOutput), args.Error(1)
+	args := m.Called(tableName, gsiName, keyConditions)
+	return args.Get(0).(*dynamodb.QueryOutput), args.Error(1)
 }
 
 func (m *MockDB) QueryOrderEventsByExternalOrderId(tableName, externalOrderId string) (*dynamodb.QueryOutput, error) {
-    args := m.Called(tableName, externalOrderId)
-    return args.Get(0).(*dynamodb.QueryOutput), args.Error(1)
+	args := m.Called(tableName, externalOrderId)
+	return args.Get(0).(*dynamodb.QueryOutput), args.Error(1)
 }
-
 
 // TestHandleWebhook tests the webhook handler function
 func TestHandleWebhook(t *testing.T) {
-    db := new(MockDB)
-   
-    // Create a UserMessageData instance with the data you expect to receive
-    userMessageData := model.UserMessageData{
-        Token: "wew1212121xewewbdgfhgdf",
-        AgreementStatus: "INACTIVE",
-        Reason: []string{"test reason", "reason 2"},
-        UserMessage: "Your Payment method is expired",
-    }
-    jsonData, err := json.Marshal(userMessageData)
-    if err != nil {
-        t.Fatal(err) // Handle errors with JSON marshaling
-    }
+	db := new(MockDB)
 
-    tableNames := []string{"My_Table"}
-    fmt.Println("TableName before mock setup:", tableNames[0]) 
-     // Setting up the expected call with mock for CreateTableIfNotExists
-    db.On("CreateTableIfNotExists", tableNames[0]).Return(nil)
-    // Setting up the expected call with mock
-    db.On("StoreData", 
-        tableNames[0], 
-        "PK#MerchantId:45", 
-        mock.AnythingOfType("model.UserMessageData")).Return(nil)
+	// Create a UserMessageData instance with the data you expect to receive
+	userMessageData := model.UserMessageData{
+		Token:           "wew1212121xewewbdgfhgdf",
+		AgreementStatus: "INACTIVE",
+		Reason:          []string{"test reason", "reason 2"},
+		UserMessage:     "Your Payment method is expired",
+	}
+	jsonData, err := json.Marshal(userMessageData)
+	if err != nil {
+		t.Fatal(err) // Handle errors with JSON marshaling
+	}
 
-    
-    handler := handler.NewWebhookHandler(db,tableNames)
-   
-    // Setting up a request
-    req := httptest.NewRequest("POST", "/45", bytes.NewReader(jsonData))
-    req.Header.Set("Content-Type", "application/json")
-    w := httptest.NewRecorder()
+	tableNames := []string{"My_Table"}
+	fmt.Println("TableName before mock setup:", tableNames[0])
+	// Setting up the expected call with mock for CreateTableIfNotExists
+	db.On("CreateTableIfNotExists", tableNames[0]).Return(nil)
+	// Setting up the expected call with mock
+	db.On("StoreData",
+		tableNames[0],
+		"PK#MerchantId:45",
+		mock.AnythingOfType("model.UserMessageData")).Return(nil)
 
-    // Calling the handler
-    handler.HandleWebhook(w, req)
+	handler := handler.NewWebhookHandler(db, tableNames)
 
-    // Check response
-    res := w.Result()
-    defer res.Body.Close()
-    assert.Equal(t, http.StatusOK, res.StatusCode, "Expected status OK")
+	// Setting up a request
+	req := httptest.NewRequest("POST", "/45", bytes.NewReader(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
 
-    /// Check that the mock was called as expected
-    db.AssertExpectations(t)
+	// Calling the handler
+	handler.HandleWebhook(w, req)
+
+	// Check response
+	res := w.Result()
+	defer res.Body.Close()
+	assert.Equal(t, http.StatusOK, res.StatusCode, "Expected status OK")
+
+	/// Check that the mock was called as expected
+	db.AssertExpectations(t)
 }
 
 // TestWebhookEvents tests the webhook handler function
 func TestWebhookVariantStockUpdateEvents(t *testing.T) {
-    t.Skip()
-    db := new(MockDB)
-    tableNames := []string{"EventWebhook"}
+	t.Skip()
+	db := new(MockDB)
+	tableNames := []string{"EventWebhook"}
 
-    // Initialize the handler
-    handler := handler.NewWebhookHandler(db,tableNames)
+	// Initialize the handler
+	handler := handler.NewWebhookHandler(db, tableNames)
 
-    // Setup a sample dynamic event for testing
-    variantStockUpdatedEvent := model.VariantStockUpdated{
-        BaseEvent: model.BaseEvent{
-            Type:       "variant/stock-updated",
-            EventId:    "529c8a0d-4b85-495a-a54c-6031995d9c2a",
-            LastUpdated: "2024-05-07T01:47:00.138Z",
-        },
-        DealID:    "378397",
-        VariantID: nil,
-        Stock:     16,
-    }
+	// Setup a sample dynamic event for testing
+	variantStockUpdatedEvent := model.VariantStockUpdated{
+		BaseEvent: model.BaseEvent{
+			Type:        "variant/stock-updated",
+			EventId:     "529c8a0d-4b85-495a-a54c-6031995d9c2a",
+			LastUpdated: "2024-05-07T01:47:00.138Z",
+		},
+		DealID:    "378397",
+		VariantID: nil,
+		Stock:     16,
+	}
 
-    jsonData, err := json.Marshal(variantStockUpdatedEvent)
-    if err != nil {
-        t.Fatal(err) // Handle errors with JSON marshaling
-    }
-    log.Printf("jsonData %s", jsonData)
+	jsonData, err := json.Marshal(variantStockUpdatedEvent)
+	if err != nil {
+		t.Fatal(err) // Handle errors with JSON marshaling
+	}
+	log.Printf("jsonData %s", jsonData)
 
-    // Mock expected database interactions
-    db.On("StoreEventData",
-        tableNames[0],
-        "variant/stock-updated",
-        "529c8a0d-4b85-495a-a54c-6031995d9c2a",
-        "2024-05-07T01:47:00.138Z",
-        "BIGW",
-        mock.Anything,
-        mock.AnythingOfType("model.EventOptions")).Return(nil)
+	// Mock expected database interactions
+	db.On("StoreEventData",
+		tableNames[0],
+		"variant/stock-updated",
+		"529c8a0d-4b85-495a-a54c-6031995d9c2a",
+		"2024-05-07T01:47:00.138Z",
+		"BIGW",
+		mock.Anything,
+		mock.AnythingOfType("model.EventOptions")).Return(nil)
 
-    // Setup a HTTP request for POST method
-    req := httptest.NewRequest("POST", "/BIGW", bytes.NewReader(jsonData))
-    req.Header.Set("Content-Type", "application/json")
-    w := httptest.NewRecorder()
+	// Setup a HTTP request for POST method
+	req := httptest.NewRequest("POST", "/BIGW", bytes.NewReader(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
 
-    // Call the handler
-    handler.WebhookEvents(w, req)
+	// Call the handler
+	handler.WebhookEvents(w, req)
 
-    // Check the response
-    res := w.Result()
-    defer res.Body.Close()
-    if res.StatusCode != http.StatusOK {
-        t.Errorf("Expected status OK; got %v", res.StatusCode)
-    }
+	// Check the response
+	res := w.Result()
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("Expected status OK; got %v", res.StatusCode)
+	}
 
-    // Verify the body of the response
-    body, _ := io.ReadAll(res.Body)
-    expectedBody := "Success"
-    if string(body) != expectedBody {
-        t.Errorf("Expected body %s; got %s", expectedBody, string(body))
-    }
+	// Verify the body of the response
+	body, _ := io.ReadAll(res.Body)
+	expectedBody := "Success"
+	if string(body) != expectedBody {
+		t.Errorf("Expected body %s; got %s", expectedBody, string(body))
+	}
 
-    /// Check that the mock was called as expected
-    db.AssertExpectations(t)
+	/// Check that the mock was called as expected
+	db.AssertExpectations(t)
 }
 
 // TestWebhookEvents tests the webhook handler function
 func TestWebhookOrderCreatedEvents(t *testing.T) {
-    db := new(MockDB)
-    tableNames := []string{"EventWebhook"}
+	db := new(MockDB)
+	tableNames := []string{"EventWebhook"}
 
-    // Initialize the handler
-    handler := handler.NewWebhookHandler(db,tableNames)
+	// Initialize the handler
+	handler := handler.NewWebhookHandler(db, tableNames)
 
-    // Setup a sample dynamic event for testing
-    orderCreated := model.OrderCreated{
-        BaseEvent: model.BaseEvent{
-            Type:        "order/created",
-            EventId:     "48b4a0d1-2a95-4308-9a45-00c65b6e70e4",
-            LastUpdated: "2024-05-03T03:48:13.506Z",
-        },
-        ExternalOrderID: "auto-test-3aef291d-1bf0-41c3-9797-de544b1a41a2",
-        Details: []model.OrderDetail{
-            {
-                ExternalOrderGroupID: "auto-test-3aef291d-1bf0-41c3-9797-de544b1a41a2",
-                ExternalOrderLineID:  "auto-test-3aef291d-1bf0-41c3-9797-de544b1a41a2",
-                Type:                 "Order",
-                InternalID:           "137955620",
-            },
-        },
-    }
+	// Setup a sample dynamic event for testing
+	orderCreated := model.OrderCreated{
+		BaseEvent: model.BaseEvent{
+			Type:        "order/created",
+			EventId:     "48b4a0d1-2a95-4308-9a45-00c65b6e70e4",
+			LastUpdated: "2024-05-03T03:48:13.506Z",
+		},
+		ExternalOrderID: "auto-test-3aef291d-1bf0-41c3-9797-de544b1a41a2",
+		Details: []model.OrderDetail{
+			{
+				ExternalOrderGroupID: "auto-test-3aef291d-1bf0-41c3-9797-de544b1a41a2",
+				ExternalOrderLineID:  "auto-test-3aef291d-1bf0-41c3-9797-de544b1a41a2",
+				Type:                 "Order",
+				InternalID:           "137955620",
+			},
+		},
+	}
 
-    jsonData, err := json.Marshal(orderCreated)
-    if err != nil {
-        t.Fatal(err) // Handle errors with JSON marshaling
-    }
-    log.Printf("jsonData %s", jsonData)
-    
-    // Mock expected database interactions
-    db.On("StoreOrderEventData",
-        tableNames[0],
-        "order/created",
-        "auto-test-3aef291d-1bf0-41c3-9797-de544b1a41a2",
-        "2024-05-03T03:48:13.506Z",
-        "BIGW",
-        mock.Anything).Return(nil)
+	jsonData, err := json.Marshal(orderCreated)
+	if err != nil {
+		t.Fatal(err) // Handle errors with JSON marshaling
+	}
+	log.Printf("jsonData %s", jsonData)
 
-    // Setup a HTTP request for POST method
-    req := httptest.NewRequest("POST", "/BIGW", bytes.NewReader(jsonData))
-    req.Header.Set("Content-Type", "application/json")
-    w := httptest.NewRecorder()
+	// Mock expected database interactions
+	db.On("StoreOrderEventData",
+		tableNames[0],
+		"order/created",
+		"auto-test-3aef291d-1bf0-41c3-9797-de544b1a41a2",
+		"2024-05-03T03:48:13.506Z",
+		"BIGW",
+		mock.Anything).Return(nil)
 
-    // Call the handler
-    handler.WebhookEvents(w, req)
+	// Setup a HTTP request for POST method
+	req := httptest.NewRequest("POST", "/BIGW", bytes.NewReader(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
 
-    // Check the response
-    res := w.Result()
-    defer res.Body.Close()
-    if res.StatusCode != http.StatusOK {
-        t.Errorf("Expected status OK; got %v", res.StatusCode)
-    }
+	// Call the handler
+	handler.WebhookEvents(w, req)
 
-    // Verify the body of the response
-    body, _ := io.ReadAll(res.Body)
-    expectedBody := "Success"
-    if string(body) != expectedBody {
-        t.Errorf("Expected body %s; got %s", expectedBody, string(body))
-    }
+	// Check the response
+	res := w.Result()
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("Expected status OK; got %v", res.StatusCode)
+	}
 
-    /// Check that the mock was called as expected
-    db.AssertExpectations(t)
+	// Verify the body of the response
+	body, _ := io.ReadAll(res.Body)
+	// Unmarshal the response body into a map
+	var actualMap map[string]interface{}
+	if err := json.Unmarshal(body, &actualMap); err != nil {
+		t.Fatalf("Failed to unmarshal response body: %v", err)
+	}
+
+	expectedBody := "Success"
+	if actualMessage, ok := actualMap["message"].(string); !ok || actualMessage != expectedBody {
+		t.Errorf("Expected message: %s, got: %s", expectedBody, actualMessage)
+	}
+
+	/// Check that the mock was called as expected
+	db.AssertExpectations(t)
+}
+
+// TestWebhookEvents tests the webhook handler function
+func TestWebhookOrderCreatedFailedEvents(t *testing.T) {
+	db := new(MockDB)
+	tableNames := []string{"EventWebhook"}
+
+	// Initialize the handler
+	handler := handler.NewWebhookHandler(db, tableNames)
+
+	// Setup a sample dynamic event for testing
+	orderCreated := model.OrderCreationFailed{
+		BaseEvent: model.BaseEvent{
+			Type:        "order/creation-failed",
+			EventId:     "48b4a0d1-2a95-4308-9a45-we2322ew",
+			LastUpdated: "2024-05-16T03:48:13.506Z",
+		},
+		ExternalOrderID: "auto-test-3aef291d-1bf0-41c3-9797-we2322ew",
+		Errors: []model.Errors{
+			{
+				Code:    "Creation failed",
+				Message: "Dummy test Creation failed",
+			},
+		},
+	}
+
+	jsonData, err := json.Marshal(orderCreated)
+	if err != nil {
+		t.Fatal(err) // Handle errors with JSON marshaling
+	}
+	log.Printf("jsonData %s", jsonData)
+
+	// Mock expected database interactions
+	db.On("StoreOrderEventData",
+		tableNames[0],
+		"order/creation-failed",
+		"auto-test-3aef291d-1bf0-41c3-9797-we2322ew",
+		"2024-05-16T03:48:13.506Z",
+		"BIGW",
+		mock.Anything).Return(nil)
+
+	// Setup a HTTP request for POST method
+	req := httptest.NewRequest("POST", "/BIGW", bytes.NewReader(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	// Call the handler
+	handler.WebhookEvents(w, req)
+
+	// Check the response
+	res := w.Result()
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("Expected status OK; got %v", res.StatusCode)
+	}
+
+	// Verify the body of the response
+	body, _ := io.ReadAll(res.Body)
+	// Unmarshal the response body into a map
+	var actualMap map[string]interface{}
+	if err := json.Unmarshal(body, &actualMap); err != nil {
+		t.Fatalf("Failed to unmarshal response body: %v", err)
+	}
+
+	expectedBody := "Success"
+	if actualMessage, ok := actualMap["message"].(string); !ok || actualMessage != expectedBody {
+		t.Errorf("Expected message: %s, got: %s", expectedBody, actualMessage)
+	}
+
+	/// Check that the mock was called as expected
+	db.AssertExpectations(t)
+}
+
+// TestWebhookEvents tests the webhook handler function
+func TestWebhookOrderLineCancelledEvents(t *testing.T) {
+	db := new(MockDB)
+	tableNames := []string{"EventWebhook"}
+
+	// Initialize the handler
+	handler := handler.NewWebhookHandler(db, tableNames)
+
+	// Setup a sample dynamic event for testing
+	orderCreated := model.OrderLineCancelled{
+		BaseEvent: model.BaseEvent{
+			Type:        "order-line/cancelled",
+			EventId:     "6b08d74c-eb15-43cf-b950-74514721dfdb",
+			LastUpdated: "2024-05-15T03:48:13.506Z",
+		},
+		ExternalOrderID:      "auto-test-AUBW273415166_0",
+		ExternalOrderGroupID: "AUBW273415166_9900001279",
+		ExternalOrderLineID:  "AUBW273415166_9900001279",
+		Note:                 "OUT OF STOCK",
+		RefundReason:         "CANCELLED_CHANGE_OF_MIND",
+        Status: "Cancelled",
+		Details: []model.OrderLineDetails{
+			{
+				Type:       "Refund",
+				InternalID: "137859460",
+			},
+		},
+	}
+
+	jsonData, err := json.Marshal(orderCreated)
+	if err != nil {
+		t.Fatal(err) // Handle errors with JSON marshaling
+	}
+	log.Printf("jsonData %s", jsonData)
+
+	// Mock expected database interactions
+	db.On("StoreOrderEventData",
+		tableNames[0],
+		"order-line/cancelled",
+		"auto-test-AUBW273415166_0",
+		"2024-05-15T03:48:13.506Z",
+		"BIGW",
+		mock.Anything).Return(nil)
+
+	// Setup a HTTP request for POST method
+	req := httptest.NewRequest("POST", "/BIGW", bytes.NewReader(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	// Call the handler
+	handler.WebhookEvents(w, req)
+
+	// Check the response
+	res := w.Result()
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("Expected status OK; got %v", res.StatusCode)
+	}
+
+	// Verify the body of the response
+	body, _ := io.ReadAll(res.Body)
+	// Unmarshal the response body into a map
+	var actualMap map[string]interface{}
+	if err := json.Unmarshal(body, &actualMap); err != nil {
+		t.Fatalf("Failed to unmarshal response body: %v", err)
+	}
+
+	expectedBody := "Success"
+	if actualMessage, ok := actualMap["message"].(string); !ok || actualMessage != expectedBody {
+		t.Errorf("Expected message: %s, got: %s", expectedBody, actualMessage)
+	}
+
+	/// Check that the mock was called as expected
+	db.AssertExpectations(t)
 }
 
 // TestDBHealthHandler tests the database health check endpoint
 func TestDBHealthHandlerOk(t *testing.T) {
-    db := new(MockDB)
-    tableNames := []string{"EventWebhook"}
-    db.On("DescribeTable", tableNames[0]).Return(nil) // Simulate a healthy database
+	db := new(MockDB)
+	tableNames := []string{"EventWebhook"}
+	db.On("DescribeTable", tableNames[0]).Return(nil) // Simulate a healthy database
 
-    handler := handler.NewWebhookHandler(db,tableNames)
-    req := httptest.NewRequest("GET", "/dbhealth", nil)
-    w := httptest.NewRecorder()
+	handler := handler.NewWebhookHandler(db, tableNames)
+	req := httptest.NewRequest("GET", "/dbhealth", nil)
+	w := httptest.NewRecorder()
 
-    handler.DBHealthHandler(w, req)
+	handler.DBHealthHandler(w, req)
 
-    // Check response
-    res := w.Result()
-    defer res.Body.Close()
-    assert.Equal(t, http.StatusOK, res.StatusCode, "Expected status OK")
+	// Check response
+	res := w.Result()
+	defer res.Body.Close()
+	assert.Equal(t, http.StatusOK, res.StatusCode, "Expected status OK")
 
-    db.AssertExpectations(t)
+	db.AssertExpectations(t)
 }
 
 // TestDBHealthHandlerFail tests the scenario where the database is unhealthy
 func TestDBHealthHandlerFail(t *testing.T) {
-    db := new(MockDB)
-    tableNames := []string{"EventWebhook"}
-    db.On("DescribeTable", tableNames[0]).Return(errors.New("database error")) // Simulate an unhealthy database
+	db := new(MockDB)
+	tableNames := []string{"EventWebhook"}
+	db.On("DescribeTable", tableNames[0]).Return(errors.New("database error")) // Simulate an unhealthy database
 
-    h := handler.NewWebhookHandler(db,tableNames)
-    handlerFunc := handler.Make(h.DBHealthHandler)
+	h := handler.NewWebhookHandler(db, tableNames)
+	handlerFunc := handler.Make(h.DBHealthHandler)
 
-    req := httptest.NewRequest("GET", "/dbhealth", nil)
-    w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/dbhealth", nil)
+	w := httptest.NewRecorder()
 
-    handlerFunc(w, req)
+	handlerFunc(w, req)
 
-    res := w.Result()
-    defer res.Body.Close()
-    assert.Equal(t, http.StatusInternalServerError, res.StatusCode, "Expected internal server error status")
+	res := w.Result()
+	defer res.Body.Close()
+	assert.Equal(t, http.StatusInternalServerError, res.StatusCode, "Expected internal server error status")
 
-    db.AssertExpectations(t)
+	db.AssertExpectations(t)
 }
 
 func TestNewAPIError(t *testing.T) {
-    err := fmt.Errorf("test error")
-    apiErr := handler.NewAPIError(http.StatusBadRequest, err, "A test error occurred.")
+	err := fmt.Errorf("test error")
+	apiErr := handler.NewAPIError(http.StatusBadRequest, err, "A test error occurred.")
 
-    if apiErr.StatusCode != http.StatusBadRequest {
-        t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, apiErr.StatusCode)
-    }
+	if apiErr.StatusCode != http.StatusBadRequest {
+		t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, apiErr.StatusCode)
+	}
 
-    if apiErr.Cause != "test error" {
-        t.Errorf("Expected cause 'test error', got '%s'", apiErr.Cause)
-    }
+	if apiErr.Cause != "test error" {
+		t.Errorf("Expected cause 'test error', got '%s'", apiErr.Cause)
+	}
 
-    if apiErr.Message != "A test error occurred." {
-        t.Errorf("Expected message 'A test error occurred.', got '%s'", apiErr.Message)
-    }
+	if apiErr.Message != "A test error occurred." {
+		t.Errorf("Expected message 'A test error occurred.', got '%s'", apiErr.Message)
+	}
 }
 
-
 func TestFetchByPrimaryKey(t *testing.T) {
-    mockDB := new(MockDB)
-    tableName := "OrderEvents"
-    pk := "#PK#BIGW#DB-Update1-770014-34f0-45b3-89b4-7b22fc4a43d1"
+	mockDB := new(MockDB)
+	tableName := "OrderEvents"
+	pk := "#PK#BIGW#DB-Update1-770014-34f0-45b3-89b4-7b22fc4a43d1"
 
-    expectedOutput := &dynamodb.QueryOutput{
-        Items: []map[string]*dynamodb.AttributeValue{
-            {
-                "PK": {S: aws.String(pk)},
-                // Add other attributes as needed
-            },
-        },
-    }
+	expectedOutput := &dynamodb.QueryOutput{
+		Items: []map[string]*dynamodb.AttributeValue{
+			{
+				"PK": {S: aws.String(pk)},
+				// Add other attributes as needed
+			},
+		},
+	}
 
-    mockDB.On("FetchByPrimaryKey", tableName, pk).Return(expectedOutput, nil)
+	mockDB.On("FetchByPrimaryKey", tableName, pk).Return(expectedOutput, nil)
 
-    result, err := mockDB.FetchByPrimaryKey(tableName, pk)
-    if err != nil {
-        t.Fatalf("Expected no error, got %v", err)
-    }
+	result, err := mockDB.FetchByPrimaryKey(tableName, pk)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
 
-    if len(result.Items) != 1 || *result.Items[0]["PK"].S != pk {
-        t.Fatalf("Expected item with PK %s, got %v", pk, result.Items)
-    }
+	if len(result.Items) != 1 || *result.Items[0]["PK"].S != pk {
+		t.Fatalf("Expected item with PK %s, got %v", pk, result.Items)
+	}
 
-    mockDB.AssertExpectations(t)
+	mockDB.AssertExpectations(t)
 }

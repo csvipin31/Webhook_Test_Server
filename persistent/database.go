@@ -206,7 +206,7 @@ func ConnectToLocalDynamoDB() (*dynamodb.DynamoDB, error) {
 	log.Println("### LOCAL_DYNAMODB.", region)
 	log.Println("### LOCAL_DYNAMODB.", endpoint)
 	if endpoint == "" {
-		endpoint = "http://localhost:8000" // Default local endpoint
+		endpoint = "http://localhost:8001" // Default local endpoint
 	}
 
 	sess := session.Must(session.NewSession(&aws.Config{
